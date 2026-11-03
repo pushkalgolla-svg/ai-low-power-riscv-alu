@@ -1,0 +1,24 @@
+# Virtual Environment
+.venv/
+venv/
+ENV/
+env/
+
+# Secrets & Environment Variables
+.env
+*.key
+
+# Python Bytecode
+__pycache__/
+*.py[cod]
+
+# Compiled Icarus Verilog simulation binaries
+reports/*.vvp
+*.vvp
+
+# Waveform dump files (generated at runtime)
+reports/*.vcd
+*.vcd
+
+# Intermediate logs
+*.log
