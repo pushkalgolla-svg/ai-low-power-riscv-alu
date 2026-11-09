@@ -1,6 +1,7 @@
 // 32-bit Standard RISC-V (RV32I) ALU - Structurally Optimized & Low-Power
 // Implements the 10 standard integer computational instructions with:
-// 1. Operand Isolation (Input Gating) to suppress redundant toggling in heavy arithmetic/shift blocks.
+// 1. Multi-Datapath Operand Isolation (Input Gating) to suppress redundant toggling
+//    in arithmetic (adder/subtractor), barrel shifter, and logical units.
 // 2. Resource Sharing: Unified single 32-bit adder for ADD, SUB, SLT, and SLTU.
 
 module riscv_alu_optimized (
@@ -47,12 +48,16 @@ module riscv_alu_optimized (
     wire [31:0] shift_a    = is_shift ? a : 32'b0;
     wire [4:0]  shift_amt  = is_shift ? b[4:0] : 5'b0;
 
+    wire [31:0] logic_a    = is_logic ? a : 32'b0;
+    wire [31:0] logic_b    = is_logic ? b : 32'b0;
+
     // =========================================================================
     // 2. RESOURCE-SHARED UNIFIED ADDER/SUBTRACTOR & COMPARATOR DATAPATH
     // Uses a single 32-bit adder for ADD, SUB, SLT, and SLTU computations.
     // =========================================================================
-    // SUB, SLT, and SLTU all utilize the subtraction path (b_comp = ~b, cin = 1)
-    wire        sub_op     = (alu_ctrl != ALU_ADD);
+    // SUB, SLT, and SLTU all utilize the subtraction path (b_comp = ~b, cin = 1).
+    // Gated with is_arith so the adder is fully quiet when arithmetic is inactive.
+    wire        sub_op     = is_arith && (alu_ctrl != ALU_ADD);
     wire [31:0] b_comp     = sub_op ? ~arith_b : arith_b;
     
     // 33-bit addition for carry-out (unsigned borrow) detection
@@ -82,9 +87,9 @@ module riscv_alu_optimized (
     // =========================================================================
     // 4. LOGICAL DATAPATH
     // =========================================================================
-    wire [31:0] logic_res = (alu_ctrl == ALU_XOR) ? (a ^ b) :
-                            (alu_ctrl == ALU_OR)  ? (a | b) :
-                            (alu_ctrl == ALU_AND) ? (a & b) : 32'b0;
+    wire [31:0] logic_res  = (alu_ctrl == ALU_XOR) ? (logic_a ^ logic_b) :
+                             (alu_ctrl == ALU_OR)  ? (logic_a | logic_b) :
+                             (alu_ctrl == ALU_AND) ? (logic_a & logic_b) : 32'b0;
 
     // =========================================================================
     // 5. OUTPUT MULTIPLEXING

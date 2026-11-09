@@ -5,105 +5,168 @@ module alu_tb;
     reg  [7:0] a;
     reg  [7:0] b;
     reg  [2:0] opcode;
-    wire [7:0] alu_out;
-    wire       carry_out;
-    wire       zero;
 
-    // Instantiate Device Under Test (DUT)
-`ifdef TEST_OPTIMIZED
-    alu_optimized dut (
+    // Baseline DUT
+    wire [7:0] base_out;
+    wire       base_carry;
+    wire       base_zero;
+
+    alu_baseline dut_base (
         .a(a),
         .b(b),
         .opcode(opcode),
-        .alu_out(alu_out),
-        .carry_out(carry_out),
-        .zero(zero)
+        .alu_out(base_out),
+        .carry_out(base_carry),
+        .zero(base_zero)
     );
+
+    // Optimized DUT (or candidate under evaluation)
+    wire [7:0] opt_out;
+    wire       opt_carry;
+    wire       opt_zero;
+
+`ifdef TEST_CANDIDATE
+    alu_candidate dut_opt (
 `else
-    alu_baseline dut (
+    alu_optimized dut_opt (
+`endif
         .a(a),
         .b(b),
         .opcode(opcode),
-        .alu_out(alu_out),
-        .carry_out(carry_out),
-        .zero(zero)
+        .alu_out(opt_out),
+        .carry_out(opt_carry),
+        .zero(opt_zero)
     );
-`endif
+
+    // Golden Reference Model
+    reg [7:0] ref_out;
+    reg       ref_carry;
+    reg       ref_zero;
+    reg [8:0] temp_arith;
+
+    task golden_reference;
+        input [7:0] in_a;
+        input [7:0] in_b;
+        input [2:0] op;
+        output [7:0] out;
+        output       carry;
+        output       z;
+        begin
+            temp_arith = 9'b0;
+            out        = 8'b0;
+            carry      = 1'b0;
+            case (op)
+                3'b000: begin // ADD
+                    temp_arith = in_a + in_b;
+                    out        = temp_arith[7:0];
+                    carry      = temp_arith[8];
+                end
+                3'b001: begin // SUB
+                    temp_arith = in_a - in_b;
+                    out        = temp_arith[7:0];
+                    carry      = temp_arith[8]; // borrow flag
+                end
+                3'b010: begin // AND
+                    out   = in_a & in_b;
+                    carry = 1'b0;
+                end
+                3'b011: begin // OR
+                    out   = in_a | in_b;
+                    carry = 1'b0;
+                end
+                3'b100: begin // XOR
+                    out   = in_a ^ in_b;
+                    carry = 1'b0;
+                end
+                default: begin
+                    out   = 8'b0;
+                    carry = 1'b0;
+                end
+            endcase
+            z = (out == 8'b0);
+        end
+    endtask
 
     integer pass_count = 0;
     integer fail_count = 0;
 
-    task check_result;
-        input [7:0] expected_out;
-        input       expected_carry;
+    task apply_and_check;
         input [255:0] test_name;
         begin
             #5; // Wait for combinational propagation
-            if (alu_out === expected_out && carry_out === expected_carry && zero === (expected_out == 8'b0)) begin
+            golden_reference(a, b, opcode, ref_out, ref_carry, ref_zero);
+
+            if (base_out === ref_out && opt_out === ref_out &&
+                base_carry === ref_carry && opt_carry === ref_carry &&
+                base_zero === ref_zero && opt_zero === ref_zero) begin
                 pass_count = pass_count + 1;
-                $display("[PASS] %s | Op: %b, A: 0x%02h, B: 0x%02h -> Out: 0x%02h (Carry: %b, Zero: %b)",
-                         test_name, opcode, a, b, alu_out, carry_out, zero);
             end else begin
                 fail_count = fail_count + 1;
-                $display("[FAIL] %s | Op: %b, A: 0x%02h, B: 0x%02h | Expected: Out=0x%02h, C=%b, Z=%b | Got: Out=0x%02h, C=%b, Z=%b",
-                         test_name, opcode, a, b, expected_out, expected_carry, (expected_out == 8'b0), alu_out, carry_out, zero);
+                $display("[FAIL] %s | Op: %b, A: 0x%02h, B: 0x%02h", test_name, opcode, a, b);
+                $display("       Ref : Out=0x%02h, C=%b, Z=%b", ref_out, ref_carry, ref_zero);
+                $display("       Base: Out=0x%02h, C=%b, Z=%b", base_out, base_carry, base_zero);
+                $display("       Opt : Out=0x%02h, C=%b, Z=%b", opt_out, opt_carry, opt_zero);
             end
         end
     endtask
 
+    integer i;
+    reg [7:0] corner_vals [0:5];
+
     initial begin
-        $display("==================================================");
-`ifdef TEST_OPTIMIZED
-        $display("       STARTING SIMULATION FOR ALU_OPTIMIZED      ");
-`else
-        $display("       STARTING SIMULATION FOR ALU_BASELINE       ");
-`endif
-        $display("==================================================");
+        corner_vals[0] = 8'h00;
+        corner_vals[1] = 8'h01;
+        corner_vals[2] = 8'h7F;
+        corner_vals[3] = 8'h80;
+        corner_vals[4] = 8'hFE;
+        corner_vals[5] = 8'hFF;
 
-        // --- TEST ADD (3'b000) ---
-        opcode = 3'b000;
-        a = 8'h05; b = 8'h03; check_result(8'h08, 1'b0, "ADD Basic (5 + 3)");
-        a = 8'hFF; b = 8'h01; check_result(8'h00, 1'b1, "ADD Overflow (255 + 1)");
-        a = 8'h00; b = 8'h00; check_result(8'h00, 1'b0, "ADD Zeros (0 + 0)");
-        a = 8'h7F; b = 8'h01; check_result(8'h80, 1'b0, "ADD Boundary (127 + 1)");
+        $display("================================================================");
+        $display("   STARTING EXPANDED 8-BIT ALU TESTBENCH (DIRECTED + RANDOM)    ");
+        $display("   Testing: Baseline vs Optimized vs Independent Golden Model    ");
+        $display("================================================================");
 
-        // --- TEST SUB (3'b001) ---
-        opcode = 3'b001;
-        a = 8'h0A; b = 8'h04; check_result(8'h06, 1'b0, "SUB Basic (10 - 4)");
-        a = 8'h04; b = 8'h0A; check_result(8'hFA, 1'b1, "SUB Underflow (4 - 10)");
-        a = 8'h55; b = 8'h55; check_result(8'h00, 1'b0, "SUB Equal (85 - 85)");
-        a = 8'hFF; b = 8'h01; check_result(8'hFE, 1'b0, "SUB High (255 - 1)");
+        // --- 1. DIRECTED CORNER-CASE TESTING ---
+        $display("[INFO] Running comprehensive directed corner-case tests...");
 
-        // --- TEST AND (3'b010) ---
-        opcode = 3'b010;
-        a = 8'hFF; b = 8'h0F; check_result(8'h0F, 1'b0, "AND Mask (0xFF & 0x0F)");
-        a = 8'hAA; b = 8'h55; check_result(8'h00, 1'b0, "AND Complementary (0xAA & 0x55)");
-        a = 8'hF0; b = 8'hA5; check_result(8'hA0, 1'b0, "AND Mixed (0xF0 & 0xA5)");
+        // Exhaustive cross-product of corner values for all opcodes (including invalid 3'b101..3'b111)
+        for (i = 0; i < 8; i = i + 1) begin
+            opcode = i[2:0];
+            // Test pairs of corner values
+            a = 8'h00; b = 8'h00; apply_and_check("Corners: Zeros");
+            a = 8'hFF; b = 8'h01; apply_and_check("Corners: 0xFF, 0x01");
+            a = 8'h7F; b = 8'h01; apply_and_check("Corners: 0x7F, 0x01 (signed boundary)");
+            a = 8'h80; b = 8'h01; apply_and_check("Corners: 0x80, 0x01");
+            a = 8'h80; b = 8'h80; apply_and_check("Corners: 0x80, 0x80");
+            a = 8'hFF; b = 8'hFF; apply_and_check("Corners: 0xFF, 0xFF");
+            a = 8'hAA; b = 8'h55; apply_and_check("Corners: Alternating 0xAA, 0x55");
+            a = 8'h55; b = 8'hAA; apply_and_check("Corners: Alternating 0x55, 0xAA");
+            a = 8'h04; b = 8'h0A; apply_and_check("Corners: 4, 10 (SUB borrow test)");
+            a = 8'h0A; b = 8'h04; apply_and_check("Corners: 10, 4 (SUB no-borrow test)");
+        end
 
-        // --- TEST OR (3'b011) ---
-        opcode = 3'b011;
-        a = 8'hF0; b = 8'h0F; check_result(8'hFF, 1'b0, "OR Combine (0xF0 | 0x0F)");
-        a = 8'hAA; b = 8'h55; check_result(8'hFF, 1'b0, "OR Alternating (0xAA | 0x55)");
-        a = 8'h00; b = 8'h00; check_result(8'h00, 1'b0, "OR Zeros (0x00 | 0x00)");
+        // --- 2. PSEUDO-RANDOM EXTENSIVE STRESS TESTING ---
+        $display("[INFO] Running 3,000 randomized test vectors across all opcodes...");
+        for (i = 0; i < 3000; i = i + 1) begin
+            a = $random;
+            b = $random;
+            opcode = $random % 8;
+            apply_and_check("Random Vector");
+        end
 
-        // --- TEST XOR (3'b100) ---
-        opcode = 3'b100;
-        a = 8'hFF; b = 8'hAA; check_result(8'h55, 1'b0, "XOR Inversion (0xFF ^ 0xAA)");
-        a = 8'hA5; b = 8'hA5; check_result(8'h00, 1'b0, "XOR Self (0xA5 ^ 0xA5)");
-        a = 8'h12; b = 8'h34; check_result(8'h26, 1'b0, "XOR Arbitrary (0x12 ^ 0x34)");
-
-        // --- SUMMARY ---
-        $display("==================================================");
-        $display(" TESTS COMPLETED: Total=%0d, Passed=%0d, Failed=%0d", 
+        // --- 3. FINAL SUMMARY ---
+        $display("================================================================");
+        $display(" 8-BIT ALU VERIFICATION SUMMARY: Total=%0d, Passed=%0d, Failed=%0d",
                  (pass_count + fail_count), pass_count, fail_count);
-        $display("==================================================");
+        $display("================================================================");
 
         if (fail_count == 0) begin
-            $display("[SIMULATION STATUS] ALL TESTS PASSED!");
+            $display("[SIMULATION STATUS] ALL TESTS PASSED SUCCESSFULLY!");
+            $finish;
         end else begin
             $display("[SIMULATION STATUS] VERIFICATION FAILED with %0d errors!", fail_count);
+            $fatal(1, "8-bit ALU verification encountered mismatches.");
         end
-        $finish;
     end
 
 endmodule

@@ -1,44 +1,43 @@
 ========================================================================================
-          32-BIT RISC-V (RV32I) ALU: AI-POWERED PPA BENCHMARK & FOOTPRINT REPORT        
+          32-BIT RISC-V (RV32I) ALU: PPA & SWITCHING ACTIVITY BENCHMARK REPORT          
 ========================================================================================
-Design Metric                        | RV32I Baseline  | AI-Optimized    | Delta     
+Design Metric                            | RV32I Baseline  | AI-Optimized    | Delta     
 ----------------------------------------------------------------------------------------
-32-bit Adder Input Transitions       | 1816            | 316             | -82.6%    
-32-bit Shifter Input Transitions     | 1816            | 206             | -88.7%    
-Total Synthesized Logic Cells        | 1485            | 1434            | -3.4%     
-Estimated Silicon Area (um^2)        | 12622.5         | 12189.0         | -3.4%     
-Interconnect Routing Wires           | 602             | 489             | -18.8%    
-Total Wire Bits                      | 1735            | 1649            | -5.0%     
+1. Dynamic Switching Activity Estimates (Signal Bit Transitions under Identical Stimulus):
+  - Primary ALU Input Transitions        | 194405          | 194405          | 0.0%      
+  - 32-bit Adder Input Transitions       | 184172          | 70512           | -61.7%    
+  - Barrel Shifter Input Transitions     | 100373          | 30945           | -69.2%    
+  - Logic Datapath Input Transitions     | 184172          | 54089           | -70.6%    
+  - ALU Output Bit Transitions           | 61103           | 61103           | 0.0%      
 ----------------------------------------------------------------------------------------
-Synthesized CMOS Technology Primitive Gate Counts:
-  - $_AND_                           | 479             | 342             | -28.6%    
-  - $_MUX_                           | 404             | 666             | +64.9%    
-  - $_NOT_                           | 49              | 48              | -2.0%     
-  - $_OR_                            | 425             | 281             | -33.9%    
-  - $_XOR_                           | 128             | 97              | -24.2%    
+2. Generic Technology-Independent Synthesis Gate Complexity (Yosys synth -noabc):
+  - Total Synthesized Cells              | 1485            | 1499            | +0.9%     
+  - Interconnect Routing Wires           | 602             | 491             | -18.4%    
+  - Total Wire Bits                      | 1735            | 1712            | -1.3%     
+  - Public Interface Wires               | 6               | 21              | +250.0%   
+----------------------------------------------------------------------------------------
+3. Technology Primitive Gate Breakdown:
+  - $_AND_                               | 479             | 343             | -28.4%    
+  - $_MUX_                               | 404             | 730             | +80.7%    
+  - $_NOT_                               | 49              | 48              | -2.0%     
+  - $_OR_                                | 425             | 281             | -33.9%    
+  - $_XOR_                               | 128             | 97              | -24.2%    
 ========================================================================================
 
-[PPA ARCHITECTURAL ANALYSIS]
-1. Dynamic Switching Power Suppression (-82.6% in Adder):
-   Operand isolation freezes inputs to the 32-bit carry chain and barrel shifter during
-   logical operations (AND, OR, XOR), completely eliminating parasitic dynamic switching (P_dyn = alpha * C * V^2 * f).
-2. Routing Congestion & Cell Optimization:
-   Achieved a -18.8% reduction in interconnect wires and -3.4% reduction in logic cell area
-   by unifying ADD, SUB, SLT, and SLTU into a single 32-bit two's-complement arithmetic block.
+[ENGINEERING ANALYSIS & ARCHITECTURAL VERDICT]
+1. Dynamic Switching Activity Suppression:
+   - Adder inputs achieved -61.7% transition toggle reduction.
+   - Shifter inputs achieved -69.2% transition toggle reduction.
+   - Mechanism: Operand isolation (input gating) forces arithmetic, shifter, and logic inputs
+     to zero when their respective execution blocks are inactive, preventing parasitic toggles
+     through high-capacitance carry chains and shift matrices.
+2. Interconnect & Area Trade-Off:
+   - Achieved -18.4% reduction in internal routing wires.
+   - Cell count changed by +0.9%: Operand isolation adds lightweight gating multiplexers
+     on sub-block inputs, trading a nominal gate overhead for massive dynamic power savings.
+3. Honest Physical Characterization Disclaimer:
+   - The transition counts reported above represent simulated dynamic switching activity,
+     not milliwatts (mW) of physical power.
+   - Absolute physical power (static leakage + dynamic internal/switching) and silicon area (um^2)
+     require target standard cell library models (.lib) and post-route parasitic extraction (SPEF/DSPF).
 ========================================================================================
-
-########################################################################################
-                 READY-TO-USE RESUME BULLET POINTS & CV DESCRIPTIONS                   
-########################################################################################
-
-• AI-Driven ASIC PPA Optimization for RISC-V (RV32I) Core:
-  - Architected and automated an AI-driven PPA (Power-Performance-Area) optimization pipeline for a 32-bit
-    RISC-V (RV32I) ALU in Verilog (IEEE 1364-2001), covering 10 standard integer computational operations.
-  - Implemented architectural Operand Isolation and unified two's-complement arithmetic resource sharing,
-    achieving a -82.6% suppression in adder input switching transitions and -18.8% reduction in routing wires.
-  - Integrated Google Gemini with Icarus Verilog regression suites (22/22 tests verified) and Yosys synthesis
-    to automate structural refactoring and physical standard-cell area estimation.
-  - Performed quantitative Value Change Dump (VCD) toggle analysis to empirically validate dynamic power
-    reduction across 32-bit carry chains and barrel shifters.
-
-########################################################################################

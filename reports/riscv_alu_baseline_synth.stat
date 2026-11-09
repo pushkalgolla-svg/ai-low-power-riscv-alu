@@ -6,7 +6,7 @@
  \----------------------------------------------------------------------------/
  Yosys 0.70 (git sha1 28ba3cb92, Release, Clang /workspace/YoWASP/yosys/wasi-sdk-33.0-x86_64-linux/share/cmake/../..//bin/clang++ 22.1.0)
 
--- Running command `read_verilog C:/Users/91900/.gemini/antigravity/scratch/low_power_alu/src/riscv_alu_baseline.v; synth -noabc -top riscv_alu_baseline; stat -tech cmos' --
+-- Running command `read_verilog C:/Users/91900/.gemini/antigravity/scratch/low_power_alu/src/riscv_alu_baseline.v; synth -noabc -top riscv_alu_baseline; stat' --
 
 1. Executing Verilog-2005 frontend: C:/Users/91900/.gemini/antigravity/scratch/low_power_alu/src/riscv_alu_baseline.v
 Parsing Verilog input from `C:/Users/91900/.gemini/antigravity/scratch/low_power_alu/src/riscv_alu_baseline.v' to AST representation.
@@ -515,9 +515,7 @@ Found and reported 0 problems.
       425   $_OR_
       128   $_XOR_
 
-   Estimated number of transistors:      11906
-
-End of script. Logfile hash: c5f220b44c, time: 0.40s, user: 0.40s, system: 0.00s
+End of script. Logfile hash: 54351da69b, time: 0.36s, user: 0.37s, system: 0.00s
 Yosys 0.70 (git sha1 28ba3cb92, Release, Clang /workspace/YoWASP/yosys/wasi-sdk-33.0-x86_64-linux/share/cmake/../..//bin/clang++ 22.1.0)
-Time spent: 27% 1x techmap (0 sec), 18% 21x opt_expr (0 sec), ...
+Time spent: 25% 1x techmap (0 sec), 21% 21x opt_expr (0 sec), ...
 

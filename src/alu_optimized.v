@@ -1,8 +1,8 @@
 // 8-bit Low-Power Optimized Arithmetic Logic Unit (ALU)
 // Low-Power & Area Optimizations:
-// 1. Operand Isolation (Input Gating): Arithmetic operands are forced to 0 
-//    when logical operations or default states are active, preventing 
-//    unnecessary dynamic power dissipation in the heavy adder/subtractor datapath.
+// 1. Operand Isolation (Input Gating): Arithmetic and logical operands are forced to 0 
+//    when their respective operations are inactive, preventing unnecessary dynamic 
+//    switching in idle sub-circuits.
 // 2. Resource Sharing: A single shared 9-bit adder/subtractor is used for both 
 //    ADD and SUB operations using two's complement inversion and carry-in (`cin`).
 // 3. Glitch mitigation and concise combinational logic structure.
@@ -32,17 +32,21 @@ module alu_optimized (
 
     // 2. Shared Adder/Subtractor Logic:
     // SUB is performed as: arith_a + (~arith_b) + 1
-    wire is_sub = (opcode == OP_SUB);
+    wire is_sub    = (opcode == OP_SUB);
     wire [7:0] b_operand = is_sub ? ~arith_b : arith_b;
     wire       cin       = is_sub;
 
     // 9-bit unified arithmetic result capturing carry/borrow
     wire [8:0] arith_res = arith_a + b_operand + {8'b0, cin};
 
-    // Pre-computed logical operation results
-    wire [7:0] and_res = a & b;
-    wire [7:0] or_res  = a | b;
-    wire [7:0] xor_res = a ^ b;
+    // 3. Logic Datapath with Operand Isolation
+    wire is_logic = (opcode == OP_AND) || (opcode == OP_OR) || (opcode == OP_XOR);
+    wire [7:0] logic_a = is_logic ? a : 8'b0;
+    wire [7:0] logic_b = is_logic ? b : 8'b0;
+
+    wire [7:0] and_res = logic_a & logic_b;
+    wire [7:0] or_res  = logic_a | logic_b;
+    wire [7:0] xor_res = logic_a ^ logic_b;
 
     // Multiplexing outputs based on opcode
     always @(*) begin

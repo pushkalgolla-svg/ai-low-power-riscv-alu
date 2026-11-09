@@ -6,7 +6,7 @@
  \----------------------------------------------------------------------------/
  Yosys 0.70 (git sha1 28ba3cb92, Release, Clang /workspace/YoWASP/yosys/wasi-sdk-33.0-x86_64-linux/share/cmake/../..//bin/clang++ 22.1.0)
 
--- Running command `read_verilog C:/Users/91900/.gemini/antigravity/scratch/low_power_alu/src/riscv_alu_optimized.v; synth -noabc -top riscv_alu_optimized; stat -tech cmos' --
+-- Running command `read_verilog C:/Users/91900/.gemini/antigravity/scratch/low_power_alu/src/riscv_alu_optimized.v; synth -noabc -top riscv_alu_optimized; stat' --
 
 1. Executing Verilog-2005 frontend: C:/Users/91900/.gemini/antigravity/scratch/low_power_alu/src/riscv_alu_optimized.v
 Parsing Verilog input from `C:/Users/91900/.gemini/antigravity/scratch/low_power_alu/src/riscv_alu_optimized.v' to AST representation.
@@ -30,8 +30,8 @@ Removed 0 unused modules.
 Cleaned up 0 empty switches.
 
 2.2.2. Executing PROC_RMDEAD pass (remove dead branches from decision trees).
-Marked 1 switch rules as full_case in process $proc$C:/Users/91900/.gemini/antigravity/scratch/low_power_alu/src/riscv_alu_optimized.v:92$43 in module riscv_alu_optimized.
-Marked 1 switch rules as full_case in process $proc$C:/Users/91900/.gemini/antigravity/scratch/low_power_alu/src/riscv_alu_optimized.v:73$30 in module riscv_alu_optimized.
+Marked 1 switch rules as full_case in process $proc$C:/Users/91900/.gemini/antigravity/scratch/low_power_alu/src/riscv_alu_optimized.v:97$46 in module riscv_alu_optimized.
+Marked 1 switch rules as full_case in process $proc$C:/Users/91900/.gemini/antigravity/scratch/low_power_alu/src/riscv_alu_optimized.v:78$33 in module riscv_alu_optimized.
 Removed a total of 0 dead cases.
 
 2.2.3. Executing PROC_PRUNE pass (remove redundant assignments in processes).
@@ -47,24 +47,24 @@ Converted 0 switches.
 <suppressed ~2 debug messages>
 
 2.2.7. Executing PROC_MUX pass (convert decision trees to multiplexers).
-Creating decoders for process `\riscv_alu_optimized.$proc$C:/Users/91900/.gemini/antigravity/scratch/low_power_alu/src/riscv_alu_optimized.v:92$43'.
+Creating decoders for process `\riscv_alu_optimized.$proc$C:/Users/91900/.gemini/antigravity/scratch/low_power_alu/src/riscv_alu_optimized.v:97$46'.
      1/1: $1\alu_out[31:0]
-Creating decoders for process `\riscv_alu_optimized.$proc$C:/Users/91900/.gemini/antigravity/scratch/low_power_alu/src/riscv_alu_optimized.v:73$30'.
+Creating decoders for process `\riscv_alu_optimized.$proc$C:/Users/91900/.gemini/antigravity/scratch/low_power_alu/src/riscv_alu_optimized.v:78$33'.
      1/1: $1\shift_res[31:0]
 
 2.2.8. Executing PROC_DLATCH pass (convert process syncs to latches).
-No latch inferred for signal `\riscv_alu_optimized.\alu_out' from process `\riscv_alu_optimized.$proc$C:/Users/91900/.gemini/antigravity/scratch/low_power_alu/src/riscv_alu_optimized.v:92$43'.
-No latch inferred for signal `\riscv_alu_optimized.\shift_res' from process `\riscv_alu_optimized.$proc$C:/Users/91900/.gemini/antigravity/scratch/low_power_alu/src/riscv_alu_optimized.v:73$30'.
+No latch inferred for signal `\riscv_alu_optimized.\alu_out' from process `\riscv_alu_optimized.$proc$C:/Users/91900/.gemini/antigravity/scratch/low_power_alu/src/riscv_alu_optimized.v:97$46'.
+No latch inferred for signal `\riscv_alu_optimized.\shift_res' from process `\riscv_alu_optimized.$proc$C:/Users/91900/.gemini/antigravity/scratch/low_power_alu/src/riscv_alu_optimized.v:78$33'.
 
 2.2.9. Executing PROC_DFF pass (convert process syncs to FFs).
 
 2.2.10. Executing PROC_MEMWR pass (convert process memory writes to cells).
 
 2.2.11. Executing PROC_CLEAN pass (remove empty switches from decision trees).
-Found and cleaned up 1 empty switch in `\riscv_alu_optimized.$proc$C:/Users/91900/.gemini/antigravity/scratch/low_power_alu/src/riscv_alu_optimized.v:92$43'.
-Removing empty process `riscv_alu_optimized.$proc$C:/Users/91900/.gemini/antigravity/scratch/low_power_alu/src/riscv_alu_optimized.v:92$43'.
-Found and cleaned up 1 empty switch in `\riscv_alu_optimized.$proc$C:/Users/91900/.gemini/antigravity/scratch/low_power_alu/src/riscv_alu_optimized.v:73$30'.
-Removing empty process `riscv_alu_optimized.$proc$C:/Users/91900/.gemini/antigravity/scratch/low_power_alu/src/riscv_alu_optimized.v:73$30'.
+Found and cleaned up 1 empty switch in `\riscv_alu_optimized.$proc$C:/Users/91900/.gemini/antigravity/scratch/low_power_alu/src/riscv_alu_optimized.v:97$46'.
+Removing empty process `riscv_alu_optimized.$proc$C:/Users/91900/.gemini/antigravity/scratch/low_power_alu/src/riscv_alu_optimized.v:97$46'.
+Found and cleaned up 1 empty switch in `\riscv_alu_optimized.$proc$C:/Users/91900/.gemini/antigravity/scratch/low_power_alu/src/riscv_alu_optimized.v:78$33'.
+Removing empty process `riscv_alu_optimized.$proc$C:/Users/91900/.gemini/antigravity/scratch/low_power_alu/src/riscv_alu_optimized.v:78$33'.
 Cleaned up 2 empty switches.
 
 2.2.12. Executing OPT_EXPR pass (perform const folding).
@@ -80,8 +80,8 @@ Found and reported 0 problems.
 
 2.5. Executing OPT_CLEAN pass (remove unused cells and wires).
 Finding unused cells or wires in module \riscv_alu_optimized..
-Removed 5 unused cells and 25 unused wires.
-<suppressed ~7 debug messages>
+Removed 0 unused cells and 22 unused wires.
+<suppressed ~1 debug messages>
 
 2.6. Executing OPT pass (performing simple optimizations).
 
@@ -90,12 +90,12 @@ Optimizing module riscv_alu_optimized.
 
 2.6.2. Executing OPT_MERGE pass (detect identical cells).
 Finding identical cells in module `\riscv_alu_optimized'.
-Computing hashes of 55 cells of `\riscv_alu_optimized'.
+Computing hashes of 63 cells of `\riscv_alu_optimized'.
 Finding duplicate cells in `\riscv_alu_optimized'.
-Computing hashes of 42 cells of `\riscv_alu_optimized'.
+Computing hashes of 47 cells of `\riscv_alu_optimized'.
 Finding duplicate cells in `\riscv_alu_optimized'.
-<suppressed ~39 debug messages>
-Removed a total of 13 cells.
+<suppressed ~48 debug messages>
+Removed a total of 16 cells.
 
 2.6.3. Executing OPT_MUXTREE pass (detect dead branches in mux trees).
 Running muxtree optimizer on module \riscv_alu_optimized..
@@ -103,7 +103,7 @@ Running muxtree optimizer on module \riscv_alu_optimized..
   Evaluating internal representation of mux trees.
   Analyzing evaluation results.
 Removed 0 multiplexer ports.
-<suppressed ~17 debug messages>
+<suppressed ~21 debug messages>
 
 2.6.4. Executing OPT_REDUCE pass (consolidate $*mux and $reduce_* inputs).
   Optimizing cells in module \riscv_alu_optimized.
@@ -111,7 +111,7 @@ Performed a total of 0 changes.
 
 2.6.5. Executing OPT_MERGE pass (detect identical cells).
 Finding identical cells in module `\riscv_alu_optimized'.
-Computing hashes of 42 cells of `\riscv_alu_optimized'.
+Computing hashes of 47 cells of `\riscv_alu_optimized'.
 Finding duplicate cells in `\riscv_alu_optimized'.
 Removed a total of 0 cells.
 
@@ -119,7 +119,7 @@ Removed a total of 0 cells.
 
 2.6.7. Executing OPT_CLEAN pass (remove unused cells and wires).
 Finding unused cells or wires in module \riscv_alu_optimized..
-Removed 0 unused cells and 8 unused wires.
+Removed 0 unused cells and 11 unused wires.
 <suppressed ~1 debug messages>
 
 2.6.8. Executing OPT_EXPR pass (perform const folding).
@@ -133,7 +133,7 @@ Running muxtree optimizer on module \riscv_alu_optimized..
   Evaluating internal representation of mux trees.
   Analyzing evaluation results.
 Removed 0 multiplexer ports.
-<suppressed ~17 debug messages>
+<suppressed ~21 debug messages>
 
 2.6.11. Executing OPT_REDUCE pass (consolidate $*mux and $reduce_* inputs).
   Optimizing cells in module \riscv_alu_optimized.
@@ -141,7 +141,7 @@ Performed a total of 0 changes.
 
 2.6.12. Executing OPT_MERGE pass (detect identical cells).
 Finding identical cells in module `\riscv_alu_optimized'.
-Computing hashes of 42 cells of `\riscv_alu_optimized'.
+Computing hashes of 47 cells of `\riscv_alu_optimized'.
 Finding duplicate cells in `\riscv_alu_optimized'.
 Removed a total of 0 cells.
 
@@ -181,7 +181,7 @@ Optimizing module riscv_alu_optimized.
 
 2.8.2. Executing OPT_MERGE pass (detect identical cells).
 Finding identical cells in module `\riscv_alu_optimized'.
-Computing hashes of 42 cells of `\riscv_alu_optimized'.
+Computing hashes of 47 cells of `\riscv_alu_optimized'.
 Finding duplicate cells in `\riscv_alu_optimized'.
 Removed a total of 0 cells.
 
@@ -191,7 +191,7 @@ Running muxtree optimizer on module \riscv_alu_optimized..
   Evaluating internal representation of mux trees.
   Analyzing evaluation results.
 Removed 0 multiplexer ports.
-<suppressed ~17 debug messages>
+<suppressed ~21 debug messages>
 
 2.8.4. Executing OPT_REDUCE pass (consolidate $*mux and $reduce_* inputs).
   Optimizing cells in module \riscv_alu_optimized.
@@ -199,7 +199,7 @@ Performed a total of 0 changes.
 
 2.8.5. Executing OPT_MERGE pass (detect identical cells).
 Finding identical cells in module `\riscv_alu_optimized'.
-Computing hashes of 42 cells of `\riscv_alu_optimized'.
+Computing hashes of 47 cells of `\riscv_alu_optimized'.
 Finding duplicate cells in `\riscv_alu_optimized'.
 Removed a total of 0 cells.
 
@@ -214,16 +214,16 @@ Optimizing module riscv_alu_optimized.
 2.8.9. Finished fast OPT passes. (There is nothing left to do.)
 
 2.9. Executing WREDUCE pass (reducing word size of cells).
-Removed top 1 bits (of 33) from port A of cell riscv_alu_optimized.$add$C:/Users/91900/.gemini/antigravity/scratch/low_power_alu/src/riscv_alu_optimized.v:59$25 ($add).
-Removed top 1 bits (of 33) from port B of cell riscv_alu_optimized.$add$C:/Users/91900/.gemini/antigravity/scratch/low_power_alu/src/riscv_alu_optimized.v:59$25 ($add).
-Removed top 32 bits (of 33) from port B of cell riscv_alu_optimized.$add$C:/Users/91900/.gemini/antigravity/scratch/low_power_alu/src/riscv_alu_optimized.v:59$26 ($add).
-Removed top 1 bits (of 4) from port B of cell riscv_alu_optimized.$procmux$47_CMP0 ($eq).
-Removed top 1 bits (of 4) from port B of cell riscv_alu_optimized.$procmux$48_CMP0 ($eq).
-Removed top 2 bits (of 4) from port B of cell riscv_alu_optimized.$procmux$49_CMP0 ($eq).
-Removed top 2 bits (of 4) from port B of cell riscv_alu_optimized.$procmux$50_CMP0 ($eq).
-Removed top 1 bits (of 4) from port B of cell riscv_alu_optimized.$procmux$50_CMP1 ($eq).
-Removed top 1 bits (of 4) from port B of cell riscv_alu_optimized.$procmux$50_CMP2 ($eq).
-Removed top 3 bits (of 4) from port B of cell riscv_alu_optimized.$procmux$51_CMP1 ($eq).
+Removed top 1 bits (of 33) from port A of cell riscv_alu_optimized.$add$C:/Users/91900/.gemini/antigravity/scratch/low_power_alu/src/riscv_alu_optimized.v:64$28 ($add).
+Removed top 1 bits (of 33) from port B of cell riscv_alu_optimized.$add$C:/Users/91900/.gemini/antigravity/scratch/low_power_alu/src/riscv_alu_optimized.v:64$28 ($add).
+Removed top 32 bits (of 33) from port B of cell riscv_alu_optimized.$add$C:/Users/91900/.gemini/antigravity/scratch/low_power_alu/src/riscv_alu_optimized.v:64$29 ($add).
+Removed top 1 bits (of 4) from port B of cell riscv_alu_optimized.$procmux$50_CMP0 ($eq).
+Removed top 1 bits (of 4) from port B of cell riscv_alu_optimized.$procmux$51_CMP0 ($eq).
+Removed top 2 bits (of 4) from port B of cell riscv_alu_optimized.$procmux$52_CMP0 ($eq).
+Removed top 3 bits (of 4) from port B of cell riscv_alu_optimized.$procmux$54_CMP1 ($eq).
+Removed top 1 bits (of 4) from port B of cell riscv_alu_optimized.$procmux$57_CMP0 ($eq).
+Removed top 1 bits (of 4) from port B of cell riscv_alu_optimized.$procmux$58_CMP0 ($eq).
+Removed top 2 bits (of 4) from port B of cell riscv_alu_optimized.$procmux$59_CMP0 ($eq).
 
 2.10. Executing PEEPOPT pass (run peephole optimizers).
 
@@ -232,23 +232,23 @@ Finding unused cells or wires in module \riscv_alu_optimized..
 
 2.12. Executing ALUMACC pass (create $alu and $macc cells).
 Extracting $alu and $macc cells in module riscv_alu_optimized:
-  creating $macc model for $add$C:/Users/91900/.gemini/antigravity/scratch/low_power_alu/src/riscv_alu_optimized.v:59$26 ($add).
-  creating $macc model for $add$C:/Users/91900/.gemini/antigravity/scratch/low_power_alu/src/riscv_alu_optimized.v:59$25 ($add).
-  merging $macc model for $add$C:/Users/91900/.gemini/antigravity/scratch/low_power_alu/src/riscv_alu_optimized.v:59$25 into $add$C:/Users/91900/.gemini/antigravity/scratch/low_power_alu/src/riscv_alu_optimized.v:59$26.
-  creating $alu model for $macc $add$C:/Users/91900/.gemini/antigravity/scratch/low_power_alu/src/riscv_alu_optimized.v:59$26.
-  creating $alu cell for $add$C:/Users/91900/.gemini/antigravity/scratch/low_power_alu/src/riscv_alu_optimized.v:59$26: $auto$alumacc.cc:578:replace_alu$57
+  creating $macc model for $add$C:/Users/91900/.gemini/antigravity/scratch/low_power_alu/src/riscv_alu_optimized.v:64$29 ($add).
+  creating $macc model for $add$C:/Users/91900/.gemini/antigravity/scratch/low_power_alu/src/riscv_alu_optimized.v:64$28 ($add).
+  merging $macc model for $add$C:/Users/91900/.gemini/antigravity/scratch/low_power_alu/src/riscv_alu_optimized.v:64$28 into $add$C:/Users/91900/.gemini/antigravity/scratch/low_power_alu/src/riscv_alu_optimized.v:64$29.
+  creating $alu model for $macc $add$C:/Users/91900/.gemini/antigravity/scratch/low_power_alu/src/riscv_alu_optimized.v:64$29.
+  creating $alu cell for $add$C:/Users/91900/.gemini/antigravity/scratch/low_power_alu/src/riscv_alu_optimized.v:64$29: $auto$alumacc.cc:578:replace_alu$60
   created 1 $alu and 0 $macc cells.
 
 2.13. Executing SHARE pass (SAT-based resource sharing).
 Found 3 cells in module riscv_alu_optimized that may be considered for resource sharing.
-  Analyzing resource sharing options for $shl$C:/Users/91900/.gemini/antigravity/scratch/low_power_alu/src/riscv_alu_optimized.v:75$31 ($shl):
-    Found 1 activation_patterns using ctrl signal { $procmux$50_CTRL $eq$C:/Users/91900/.gemini/antigravity/scratch/low_power_alu/src/riscv_alu_optimized.v:31$8_Y }.
+  Analyzing resource sharing options for $shl$C:/Users/91900/.gemini/antigravity/scratch/low_power_alu/src/riscv_alu_optimized.v:80$34 ($shl):
+    Found 1 activation_patterns using ctrl signal { $procmux$53_CTRL $eq$C:/Users/91900/.gemini/antigravity/scratch/low_power_alu/src/riscv_alu_optimized.v:32$8_Y }.
     No candidates found.
-  Analyzing resource sharing options for $shr$C:/Users/91900/.gemini/antigravity/scratch/low_power_alu/src/riscv_alu_optimized.v:76$32 ($shr):
-    Found 1 activation_patterns using ctrl signal { $procmux$50_CTRL $eq$C:/Users/91900/.gemini/antigravity/scratch/low_power_alu/src/riscv_alu_optimized.v:32$9_Y }.
+  Analyzing resource sharing options for $shr$C:/Users/91900/.gemini/antigravity/scratch/low_power_alu/src/riscv_alu_optimized.v:81$35 ($shr):
+    Found 1 activation_patterns using ctrl signal { $procmux$53_CTRL $eq$C:/Users/91900/.gemini/antigravity/scratch/low_power_alu/src/riscv_alu_optimized.v:33$9_Y }.
     No candidates found.
-  Analyzing resource sharing options for $sshr$C:/Users/91900/.gemini/antigravity/scratch/low_power_alu/src/riscv_alu_optimized.v:77$33 ($sshr):
-    Found 1 activation_patterns using ctrl signal { $procmux$50_CTRL $eq$C:/Users/91900/.gemini/antigravity/scratch/low_power_alu/src/riscv_alu_optimized.v:33$11_Y }.
+  Analyzing resource sharing options for $sshr$C:/Users/91900/.gemini/antigravity/scratch/low_power_alu/src/riscv_alu_optimized.v:82$36 ($sshr):
+    Found 1 activation_patterns using ctrl signal { $procmux$53_CTRL $eq$C:/Users/91900/.gemini/antigravity/scratch/low_power_alu/src/riscv_alu_optimized.v:34$11_Y }.
     No candidates found.
 
 2.14. Executing OPT pass (performing simple optimizations).
@@ -258,7 +258,7 @@ Optimizing module riscv_alu_optimized.
 
 2.14.2. Executing OPT_MERGE pass (detect identical cells).
 Finding identical cells in module `\riscv_alu_optimized'.
-Computing hashes of 42 cells of `\riscv_alu_optimized'.
+Computing hashes of 47 cells of `\riscv_alu_optimized'.
 Finding duplicate cells in `\riscv_alu_optimized'.
 Removed a total of 0 cells.
 
@@ -268,7 +268,7 @@ Running muxtree optimizer on module \riscv_alu_optimized..
   Evaluating internal representation of mux trees.
   Analyzing evaluation results.
 Removed 0 multiplexer ports.
-<suppressed ~17 debug messages>
+<suppressed ~21 debug messages>
 
 2.14.4. Executing OPT_REDUCE pass (consolidate $*mux and $reduce_* inputs).
   Optimizing cells in module \riscv_alu_optimized.
@@ -276,7 +276,7 @@ Performed a total of 0 changes.
 
 2.14.5. Executing OPT_MERGE pass (detect identical cells).
 Finding identical cells in module `\riscv_alu_optimized'.
-Computing hashes of 42 cells of `\riscv_alu_optimized'.
+Computing hashes of 47 cells of `\riscv_alu_optimized'.
 Finding duplicate cells in `\riscv_alu_optimized'.
 Removed a total of 0 cells.
 
@@ -298,7 +298,7 @@ Running muxtree optimizer on module \riscv_alu_optimized..
   Evaluating internal representation of mux trees.
   Analyzing evaluation results.
 Removed 0 multiplexer ports.
-<suppressed ~17 debug messages>
+<suppressed ~21 debug messages>
 
 2.14.11. Executing OPT_REDUCE pass (consolidate $*mux and $reduce_* inputs).
   Optimizing cells in module \riscv_alu_optimized.
@@ -306,7 +306,7 @@ Performed a total of 0 changes.
 
 2.14.12. Executing OPT_MERGE pass (detect identical cells).
 Finding identical cells in module `\riscv_alu_optimized'.
-Computing hashes of 41 cells of `\riscv_alu_optimized'.
+Computing hashes of 46 cells of `\riscv_alu_optimized'.
 Finding duplicate cells in `\riscv_alu_optimized'.
 Removed a total of 0 cells.
 
@@ -357,7 +357,7 @@ Optimizing module riscv_alu_optimized.
 
 2.17.2. Executing OPT_MERGE pass (detect identical cells).
 Finding identical cells in module `\riscv_alu_optimized'.
-Computing hashes of 41 cells of `\riscv_alu_optimized'.
+Computing hashes of 46 cells of `\riscv_alu_optimized'.
 Finding duplicate cells in `\riscv_alu_optimized'.
 Removed a total of 0 cells.
 
@@ -377,7 +377,7 @@ Optimizing module riscv_alu_optimized.
 
 2.19.2. Executing OPT_MERGE pass (detect identical cells).
 Finding identical cells in module `\riscv_alu_optimized'.
-Computing hashes of 41 cells of `\riscv_alu_optimized'.
+Computing hashes of 46 cells of `\riscv_alu_optimized'.
 Finding duplicate cells in `\riscv_alu_optimized'.
 Removed a total of 0 cells.
 
@@ -387,7 +387,7 @@ Running muxtree optimizer on module \riscv_alu_optimized..
   Evaluating internal representation of mux trees.
   Analyzing evaluation results.
 Removed 0 multiplexer ports.
-<suppressed ~17 debug messages>
+<suppressed ~21 debug messages>
 
 2.19.4. Executing OPT_REDUCE pass (consolidate $*mux and $reduce_* inputs).
   Optimizing cells in module \riscv_alu_optimized.
@@ -395,7 +395,7 @@ Performed a total of 0 changes.
 
 2.19.5. Executing OPT_MERGE pass (detect identical cells).
 Finding identical cells in module `\riscv_alu_optimized'.
-Computing hashes of 41 cells of `\riscv_alu_optimized'.
+Computing hashes of 46 cells of `\riscv_alu_optimized'.
 Finding duplicate cells in `\riscv_alu_optimized'.
 Removed a total of 0 cells.
 
@@ -447,6 +447,7 @@ Using template $paramod$857150d3a9b7fb38b73bbaa31ff652415e553f98\_90_alu for cel
 Using extmapper simplemap for cells of type $logic_or.
 Using extmapper simplemap for cells of type $mux.
 Using extmapper simplemap for cells of type $reduce_bool.
+Using extmapper simplemap for cells of type $logic_and.
 Using extmapper simplemap for cells of type $not.
 Using extmapper simplemap for cells of type $ne.
 Using template $paramod$constmap:6111415c3ecfd9bb520e2072bfee38e7d8bfb139$paramod$335cfd09f1afa8139c4aafcbbe5f361887b79c5e\_90_shift_ops_shr_shl_sshl_sshr for cells of type $shl.
@@ -463,7 +464,7 @@ Using template $paramod\_90_fa\WIDTH=32'00000000000000000000000000100001 for cel
 Using template $paramod\_90_lcu_brent_kung\WIDTH=32'00000000000000000000000000100001 for cells of type $lcu.
 Using extmapper simplemap for cells of type $pos.
 No more expansions possible.
-<suppressed ~1583 debug messages>
+<suppressed ~1588 debug messages>
 
 2.21. Executing OPT pass (performing simple optimizations).
 
@@ -473,26 +474,26 @@ Optimizing module riscv_alu_optimized.
 
 2.21.2. Executing OPT_MERGE pass (detect identical cells).
 Finding identical cells in module `\riscv_alu_optimized'.
-Computing hashes of 1599 cells of `\riscv_alu_optimized'.
+Computing hashes of 1666 cells of `\riscv_alu_optimized'.
 Finding duplicate cells in `\riscv_alu_optimized'.
-Computing hashes of 1548 cells of `\riscv_alu_optimized'.
+Computing hashes of 1614 cells of `\riscv_alu_optimized'.
 Finding duplicate cells in `\riscv_alu_optimized'.
-Computing hashes of 1509 cells of `\riscv_alu_optimized'.
+Computing hashes of 1574 cells of `\riscv_alu_optimized'.
 Finding duplicate cells in `\riscv_alu_optimized'.
-Computing hashes of 1484 cells of `\riscv_alu_optimized'.
+Computing hashes of 1549 cells of `\riscv_alu_optimized'.
 Finding duplicate cells in `\riscv_alu_optimized'.
-Computing hashes of 1467 cells of `\riscv_alu_optimized'.
+Computing hashes of 1532 cells of `\riscv_alu_optimized'.
 Finding duplicate cells in `\riscv_alu_optimized'.
-Computing hashes of 1466 cells of `\riscv_alu_optimized'.
+Computing hashes of 1531 cells of `\riscv_alu_optimized'.
 Finding duplicate cells in `\riscv_alu_optimized'.
-<suppressed ~399 debug messages>
-Removed a total of 133 cells.
+<suppressed ~405 debug messages>
+Removed a total of 135 cells.
 
 2.21.3. Executing OPT_DFF pass (perform DFF optimizations).
 
 2.21.4. Executing OPT_CLEAN pass (remove unused cells and wires).
 Finding unused cells or wires in module \riscv_alu_optimized..
-Removed 32 unused cells and 224 unused wires.
+Removed 32 unused cells and 227 unused wires.
 <suppressed ~33 debug messages>
 
 2.21.5. Finished fast OPT passes.
@@ -513,15 +514,15 @@ Removed 0 unused modules.
 
         +----------Local Count, excluding submodules.
         | 
-      489 wires
-     1649 wire bits
-       18 public wires
-      336 public wire bits
+      491 wires
+     1712 wire bits
+       21 public wires
+      401 public wire bits
         5 ports
       101 port bits
-     1434 cells
-      342   $_AND_
-      666   $_MUX_
+     1499 cells
+      343   $_AND_
+      730   $_MUX_
        48   $_NOT_
       281   $_OR_
        97   $_XOR_
@@ -536,22 +537,20 @@ Found and reported 0 problems.
 
         +----------Local Count, excluding submodules.
         | 
-      489 wires
-     1649 wire bits
-       18 public wires
-      336 public wire bits
+      491 wires
+     1712 wire bits
+       21 public wires
+      401 public wire bits
         5 ports
       101 port bits
-     1434 cells
-      342   $_AND_
-      666   $_MUX_
+     1499 cells
+      343   $_AND_
+      730   $_MUX_
        48   $_NOT_
       281   $_OR_
        97   $_XOR_
 
-   Estimated number of transistors:      12990
-
-End of script. Logfile hash: 0dc7d1fb5a, time: 0.46s, user: 0.47s, system: 0.00s
+End of script. Logfile hash: e16d6f47a7, time: 0.36s, user: 0.37s, system: 0.00s
 Yosys 0.70 (git sha1 28ba3cb92, Release, Clang /workspace/YoWASP/yosys/wasi-sdk-33.0-x86_64-linux/share/cmake/../..//bin/clang++ 22.1.0)
-Time spent: 27% 1x techmap (0 sec), 19% 22x opt_expr (0 sec), ...
+Time spent: 23% 1x techmap (0 sec), 19% 22x opt_expr (0 sec), ...
 

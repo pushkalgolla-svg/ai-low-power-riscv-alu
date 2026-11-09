@@ -22,3 +22,6 @@ reports/*.vcd
 
 # Intermediate logs
 *.log
+
+# AI optimization candidates (evaluated before explicit promotion)
+src/*_candidate.v

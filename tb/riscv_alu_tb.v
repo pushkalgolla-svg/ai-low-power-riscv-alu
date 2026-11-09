@@ -5,138 +5,234 @@ module riscv_alu_tb;
     reg  [31:0] a;
     reg  [31:0] b;
     reg  [3:0]  alu_ctrl;
-    wire [31:0] alu_out;
-    wire        zero;
 
-`ifdef TEST_OPTIMIZED
-    riscv_alu_optimized dut (
+    // Baseline DUT
+    wire [31:0] base_out;
+    wire        base_zero;
+
+    riscv_alu_baseline dut_base (
         .a(a),
         .b(b),
         .alu_ctrl(alu_ctrl),
-        .alu_out(alu_out),
-        .zero(zero)
+        .alu_out(base_out),
+        .zero(base_zero)
     );
+
+    // Optimized DUT (or candidate under evaluation)
+    wire [31:0] opt_out;
+    wire        opt_zero;
+
+`ifdef TEST_CANDIDATE
+    riscv_alu_candidate dut_opt (
 `else
-    riscv_alu_baseline dut (
+    riscv_alu_optimized dut_opt (
+`endif
         .a(a),
         .b(b),
         .alu_ctrl(alu_ctrl),
-        .alu_out(alu_out),
-        .zero(zero)
+        .alu_out(opt_out),
+        .zero(opt_zero)
     );
-`endif
+
+    // Independent Golden Reference Model
+    reg [31:0] ref_out;
+    reg        ref_zero;
+
+    task golden_reference;
+        input [31:0] in_a;
+        input [31:0] in_b;
+        input [3:0]  ctrl;
+        output [31:0] out;
+        output        z;
+        reg [4:0] shamt;
+        begin
+            shamt = in_b[4:0];
+            case (ctrl)
+                4'b0000: out = in_a + in_b;                                         // ADD
+                4'b0001: out = in_a - in_b;                                         // SUB
+                4'b0010: out = in_a << shamt;                                       // SLL
+                4'b0011: out = ($signed(in_a) < $signed(in_b)) ? 32'd1 : 32'd0;    // SLT
+                4'b0100: out = (in_a < in_b) ? 32'd1 : 32'd0;                       // SLTU
+                4'b0101: out = in_a ^ in_b;                                         // XOR
+                4'b0110: out = in_a >> shamt;                                       // SRL
+                4'b0111: out = $signed(in_a) >>> shamt;                             // SRA
+                4'b1000: out = in_a | in_b;                                         // OR
+                4'b1001: out = in_a & in_b;                                         // AND
+                default: out = 32'h0000_0000;
+            endcase
+            z = (out == 32'h0000_0000);
+        end
+    endtask
 
     integer pass_count = 0;
     integer fail_count = 0;
 
-    task check_result;
-        input [31:0] expected_out;
+    task apply_and_check;
         input [255:0] test_name;
         begin
-            #10;
-            if (alu_out === expected_out && zero === (expected_out == 32'b0)) begin
+            #10; // Propagation delay
+            golden_reference(a, b, alu_ctrl, ref_out, ref_zero);
+
+            if (base_out === ref_out && opt_out === ref_out &&
+                base_zero === ref_zero && opt_zero === ref_zero) begin
                 pass_count = pass_count + 1;
-                $display("[PASS] %s | Ctrl: %b, A: 0x%08h, B: 0x%08h -> Out: 0x%08h (Zero: %b)",
-                         test_name, alu_ctrl, a, b, alu_out, zero);
             end else begin
                 fail_count = fail_count + 1;
-                $display("[FAIL] %s | Ctrl: %b, A: 0x%08h, B: 0x%08h | Expected: 0x%08h (Z=%b) | Got: 0x%08h (Z=%b)",
-                         test_name, alu_ctrl, a, b, expected_out, (expected_out == 32'b0), alu_out, zero);
+                $display("[FAIL] %s | Ctrl=%b, A=0x%08h, B=0x%08h", test_name, alu_ctrl, a, b);
+                $display("       Reference: Out=0x%08h, Zero=%b", ref_out, ref_zero);
+                $display("       Baseline : Out=0x%08h, Zero=%b", base_out, base_zero);
+                $display("       Optimized: Out=0x%08h, Zero=%b", opt_out, opt_zero);
             end
         end
     endtask
 
-    integer i;
+    // Helper function for corner values
+    function [31:0] get_corner_val;
+        input integer idx;
+        begin
+            case (idx % 8)
+                0: get_corner_val = 32'h0000_0000;
+                1: get_corner_val = 32'h0000_0001;
+                2: get_corner_val = 32'hFFFF_FFFF; // -1
+                3: get_corner_val = 32'h7FFF_FFFF; // Max signed positive
+                4: get_corner_val = 32'h8000_0000; // Min signed negative
+                5: get_corner_val = 32'hAAAA_AAAA;
+                6: get_corner_val = 32'h5555_5555;
+                7: get_corner_val = 32'h1234_5678;
+            endcase
+        end
+    endfunction
+
+    integer i, j, op;
 
     initial begin
 `ifdef DUMP_VCD
-    `ifdef TEST_OPTIMIZED
-        $dumpfile("reports/riscv_optimized_activity.vcd");
-    `else
-        $dumpfile("reports/riscv_baseline_activity.vcd");
-    `endif
-        $dumpvars(0, dut);
+        $dumpfile("reports/riscv_activity.vcd");
+        $dumpvars(0, dut_base);
+        $dumpvars(0, dut_opt);
 `endif
 
         $display("==================================================================");
-`ifdef TEST_OPTIMIZED
-        $display("       STARTING SIMULATION FOR RISC-V 32-bit ALU (OPTIMIZED)      ");
-`else
-        $display("       STARTING SIMULATION FOR RISC-V 32-bit ALU (BASELINE)       ");
-`endif
+        $display("   STARTING EXPANDED 32-BIT RISC-V (RV32I) ALU VERIFICATION       ");
+        $display("   Testing: Baseline vs Optimized vs Independent Golden Model     ");
         $display("==================================================================");
 
-        // 1. ADD
-        alu_ctrl = 4'b0000;
-        a = 32'h0000_0005; b = 32'h0000_0003; check_result(32'h0000_0008, "ADD Basic");
-        a = 32'hFFFF_FFFF; b = 32'h0000_0001; check_result(32'h0000_0000, "ADD Overflow (Zero)");
-        a = 32'h7FFF_FFFF; b = 32'h0000_0001; check_result(32'h8000_0000, "ADD Signed Overflow");
+        // --- 1. DIRECTED CORNER-CASE TESTS FOR EVERY OPCODE ---
+        $display("[INFO] Running exhaustive corner-case combinations...");
 
-        // 2. SUB
-        alu_ctrl = 4'b0001;
-        a = 32'h0000_000A; b = 32'h0000_0004; check_result(32'h0000_0006, "SUB Basic");
-        a = 32'h0000_0000; b = 32'h0000_0001; check_result(32'hFFFF_FFFF, "SUB Negative (-1)");
-        a = 32'h1234_5678; b = 32'h1234_5678; check_result(32'h0000_0000, "SUB Equal (Zero)");
+        for (op = 0; op < 16; op = op + 1) begin
+            alu_ctrl = op[3:0];
+            for (i = 0; i < 8; i = i + 1) begin
+                for (j = 0; j < 8; j = j + 1) begin
+                    a = get_corner_val(i);
+                    b = get_corner_val(j);
+                    apply_and_check("Corner Cross-Product");
+                end
+            end
+        end
 
-        // 3. SLL (Shift Left Logical)
-        alu_ctrl = 4'b0010;
-        a = 32'h0000_0001; b = 32'd4; check_result(32'h0000_0010, "SLL by 4");
-        a = 32'h0000_0001; b = 32'd31; check_result(32'h8000_0000, "SLL to MSB (by 31)");
-        a = 32'hFFFF_FFFF; b = 32'd32; check_result(32'hFFFF_FFFF, "SLL shamt[4:0] mask (by 32 => 0)");
+        // --- 2. DEDICATED BOUNDARY & SPECIALIZED TESTS ---
+        $display("[INFO] Running specialized boundary checks (signed/unsigned/shifts)...");
 
-        // 4. SLT (Set Less Than, Signed)
-        alu_ctrl = 4'b0011;
-        a = 32'hFFFF_FFFF; b = 32'h0000_0001; check_result(32'd1, "SLT (-1 < 1 -> 1)");
-        a = 32'h0000_0005; b = 32'h0000_0002; check_result(32'd0, "SLT (5 < 2 -> 0)");
-        a = 32'h8000_0000; b = 32'h7FFF_FFFF; check_result(32'd1, "SLT (MinNegative < MaxPositive)");
+        // Shift boundary tests: 0, 1, 30, 31, 32, 63, 0xFFFFFFFF
+        alu_ctrl = 4'b0010; // SLL
+        a = 32'h0000_0001; b = 32'd0;  apply_and_check("SLL by 0");
+        a = 32'h0000_0001; b = 32'd1;  apply_and_check("SLL by 1");
+        a = 32'h0000_0001; b = 32'd31; apply_and_check("SLL by 31 (MSB)");
+        a = 32'h0000_0001; b = 32'd32; apply_and_check("SLL by 32 (wraps to 0)");
+        a = 32'h0000_0001; b = 32'd63; apply_and_check("SLL by 63 (wraps to 31)");
+        a = 32'hFFFF_FFFF; b = 32'hFFFF_FFFF; apply_and_check("SLL by 0xFFFFFFFF (wraps to 31)");
 
-        // 5. SLTU (Set Less Than, Unsigned)
-        alu_ctrl = 4'b0100;
-        a = 32'h0000_0001; b = 32'hFFFF_FFFF; check_result(32'd1, "SLTU (1 < 0xFFFFFFFF -> 1)");
-        a = 32'hFFFF_FFFF; b = 32'h0000_0001; check_result(32'd0, "SLTU (0xFFFFFFFF < 1 -> 0)");
+        alu_ctrl = 4'b0110; // SRL
+        a = 32'h8000_0000; b = 32'd0;  apply_and_check("SRL by 0");
+        a = 32'h8000_0000; b = 32'd1;  apply_and_check("SRL by 1");
+        a = 32'h8000_0000; b = 32'd31; apply_and_check("SRL by 31 (LSB)");
+        a = 32'h8000_0000; b = 32'd32; apply_and_check("SRL by 32 (wraps to 0)");
 
-        // 6. XOR
-        alu_ctrl = 4'b0101;
-        a = 32'hFFFF_0000; b = 32'h0000_FFFF; check_result(32'hFFFF_FFFF, "XOR Alternate");
-        a = 32'hA5A5_A5A5; b = 32'hA5A5_A5A5; check_result(32'h0000_0000, "XOR Self (Zero)");
+        alu_ctrl = 4'b0111; // SRA
+        a = 32'h8000_0000; b = 32'd0;  apply_and_check("SRA negative by 0");
+        a = 32'h8000_0000; b = 32'd1;  apply_and_check("SRA negative by 1 (sign ext)");
+        a = 32'h8000_0000; b = 32'd31; apply_and_check("SRA negative by 31 (all 1s)");
+        a = 32'h7FFF_FFFF; b = 32'd1;  apply_and_check("SRA positive by 1 (no sign ext)");
+        a = 32'h7FFF_FFFF; b = 32'd31; apply_and_check("SRA positive by 31 (all 0s)");
 
-        // 7. SRL (Shift Right Logical)
-        alu_ctrl = 4'b0110;
-        a = 32'h8000_0000; b = 32'd4; check_result(32'h0800_0000, "SRL Zero-fill");
-        a = 32'hFFFF_FFFF; b = 32'd8; check_result(32'h00FF_FFFF, "SRL by 8");
+        // SLT signed overflow tests
+        alu_ctrl = 4'b0011; // SLT
+        a = 32'h8000_0000; b = 32'h7FFF_FFFF; apply_and_check("SLT: MinNeg < MaxPos (TRUE)");
+        a = 32'h7FFF_FFFF; b = 32'h8000_0000; apply_and_check("SLT: MaxPos < MinNeg (FALSE)");
+        a = 32'hFFFF_FFFF; b = 32'h0000_0000; apply_and_check("SLT: -1 < 0 (TRUE)");
+        a = 32'h0000_0000; b = 32'hFFFF_FFFF; apply_and_check("SLT: 0 < -1 (FALSE)");
+        a = 32'hFFFF_FFFE; b = 32'hFFFF_FFFF; apply_and_check("SLT: -2 < -1 (TRUE)");
+        a = 32'hFFFF_FFFF; b = 32'hFFFF_FFFE; apply_and_check("SLT: -1 < -2 (FALSE)");
+        a = 32'h8000_0000; b = 32'h8000_0000; apply_and_check("SLT: Equal MinNeg (FALSE)");
 
-        // 8. SRA (Shift Right Arithmetic)
-        alu_ctrl = 4'b0111;
-        a = 32'h8000_0000; b = 32'd4; check_result(32'hF800_0000, "SRA Sign-extension");
-        a = 32'h7FFF_FFFF; b = 32'd4; check_result(32'h07FF_FFFF, "SRA Positive no-sign-ext");
+        // SLTU unsigned boundary tests
+        alu_ctrl = 4'b0100; // SLTU
+        a = 32'h0000_0000; b = 32'hFFFF_FFFF; apply_and_check("SLTU: 0 < MaxUnsigned (TRUE)");
+        a = 32'hFFFF_FFFF; b = 32'h0000_0000; apply_and_check("SLTU: MaxUnsigned < 0 (FALSE)");
+        a = 32'h7FFF_FFFF; b = 32'h8000_0000; apply_and_check("SLTU: 0x7FFFFFFF < 0x80000000 (TRUE)");
+        a = 32'h8000_0000; b = 32'h7FFF_FFFF; apply_and_check("SLTU: 0x80000000 < 0x7FFFFFFF (FALSE)");
+        a = 32'hFFFF_FFFF; b = 32'hFFFF_FFFF; apply_and_check("SLTU: Equal MaxUnsigned (FALSE)");
 
-        // 9. OR & 10. AND
-        alu_ctrl = 4'b1000;
-        a = 32'h1234_0000; b = 32'h0000_5678; check_result(32'h1234_5678, "OR Basic");
-        alu_ctrl = 4'b1001;
-        a = 32'hFFFF_5678; b = 32'h0000_FFFF; check_result(32'h0000_5678, "AND Basic");
+        // ADD / SUB overflow tests
+        alu_ctrl = 4'b0000; // ADD
+        a = 32'h7FFF_FFFF; b = 32'h0000_0001; apply_and_check("ADD: Signed overflow to 0x80000000");
+        a = 32'hFFFF_FFFF; b = 32'h0000_0001; apply_and_check("ADD: Unsigned overflow wraps to 0");
+        a = 32'h8000_0000; b = 32'h8000_0000; apply_and_check("ADD: Two MinNeg wraps to 0");
 
-        // --- Workload Loop (Simulating continuous logical & arithmetic operations to measure switching power) ---
-        $display("[INFO] Running switching activity workload profile...");
-        for (i = 0; i < 50; i = i + 1) begin
+        alu_ctrl = 4'b0001; // SUB
+        a = 32'h0000_0000; b = 32'h0000_0001; apply_and_check("SUB: 0 - 1 wraps to 0xFFFFFFFF");
+        a = 32'h8000_0000; b = 32'h0000_0001; apply_and_check("SUB: MinNeg - 1 overflows to MaxPos");
+
+        // --- 3. PSEUDO-RANDOM EXTENSIVE STRESS TESTING ---
+        $display("[INFO] Running 5,000 randomized test vectors across all 16 opcodes...");
+        for (i = 0; i < 5000; i = i + 1) begin
+            // 20% of the time, bias toward corner values; 80% uniform random
+            if ((i % 5) == 0) begin
+                a = get_corner_val($random);
+            end else begin
+                a = {$random, $random};
+            end
+
+            if ((i % 5) == 1) begin
+                b = get_corner_val($random);
+            end else begin
+                b = {$random, $random};
+            end
+
+            alu_ctrl = $random % 16;
+            apply_and_check("Random Stress Vector");
+        end
+
+        // --- 4. CONTROLLED REPRODUCIBLE SWITCHING ACTIVITY WORKLOAD ---
+        $display("[INFO] Executing switching-activity workload profiling trace (100 cycles)...");
+        for (i = 0; i < 100; i = i + 1) begin
             #5;
-            alu_ctrl = (i % 2 == 0) ? 4'b1001 : 4'b1000; // Toggle AND and OR operations
+            // Alternating between logic (AND/OR/XOR), shifts, and arithmetic
+            case (i % 5)
+                0: alu_ctrl = 4'b1001; // AND
+                1: alu_ctrl = 4'b1000; // OR
+                2: alu_ctrl = 4'b0101; // XOR
+                3: alu_ctrl = 4'b0000; // ADD
+                4: alu_ctrl = 4'b0010; // SLL
+            endcase
             a = a ^ (32'h0101_0101 * (i + 1));
             b = b + (32'h0202_0202 * (i + 1));
         end
 
-        // --- SUMMARY ---
+        // --- 5. FINAL SUMMARY ---
         $display("==================================================================");
-        $display(" TESTS COMPLETED: Total=%0d, Passed=%0d, Failed=%0d", 
+        $display(" 32-BIT RISC-V ALU VERIFICATION: Total=%0d, Passed=%0d, Failed=%0d", 
                  (pass_count + fail_count), pass_count, fail_count);
         $display("==================================================================");
 
         if (fail_count == 0) begin
-            $display("[SIMULATION STATUS] ALL RISC-V 32-BIT ALU TESTS PASSED!");
+            $display("[SIMULATION STATUS] ALL 32-BIT RISC-V TESTS PASSED SUCCESSFULLY!");
+            $finish;
         end else begin
-            $display("[SIMULATION STATUS] VERIFICATION FAILED with %0d errors!", fail_count);
+            $display("[SIMULATION STATUS] VERIFICATION FAILED with %0d mismatches!", fail_count);
+            $fatal(1, "32-bit RISC-V ALU verification failed.");
         end
-        $finish;
     end
 
 endmodule

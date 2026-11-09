@@ -2,11 +2,11 @@
 32-bit RISC-V (RV32I) ALU AI-Powered PPA Optimization & Synthesis Orchestrator
 ------------------------------------------------------------------------------
 Features:
-1. Architectural Low-Power Optimization (Operand Isolation on 32-bit datapath & Shifter).
-2. Resource Sharing (Unified 32-bit Adder/Subtractor/Comparator for ADD, SUB, SLT, SLTU).
-3. Switching Activity & Dynamic Power Quantification via VCD Toggle Profiling.
-4. Physical CMOS Transistor Count & Standard-Cell Silicon Area Estimation via Yosys.
-5. Formatted Resume-Ready Bullet Points & Portfolio Documentation.
+1. RTL Verification: Dual-DUT lockstep co-simulation (baseline vs optimized vs golden model).
+2. Fair Dynamic Switching Activity Profiling: Measures bit transitions from identical VCD traces.
+3. Technology-Independent Synthesis: Generic CMOS gate mapping via Yosys with zero arbitrary multipliers.
+4. Candidate Safety: AI generation writes strictly to candidate files without overwriting validated RTL.
+5. Fully Offline Capable: Standard verification and synthesis require no API keys or internet connection.
 """
 
 import os
@@ -14,15 +14,8 @@ import re
 import sys
 import shutil
 import argparse
-import warnings
 import subprocess
 from pathlib import Path
-
-warnings.filterwarnings("ignore")
-
-import dotenv
-import google.generativeai as genai
-from google.api_core import exceptions as google_exceptions
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 SRC_DIR = PROJECT_ROOT / "src"
@@ -31,19 +24,6 @@ REPORTS_DIR = PROJECT_ROOT / "reports"
 ENV_FILE = PROJECT_ROOT / ".env"
 
 REPORTS_DIR.mkdir(parents=True, exist_ok=True)
-
-# Load environment
-if ENV_FILE.exists():
-    dotenv.load_dotenv(ENV_FILE)
-api_key = os.environ.get("GEMINI_API_KEY")
-if not api_key:
-    parent_env = PROJECT_ROOT.parent / "ai_verification" / ".env"
-    if parent_env.exists():
-        dotenv.load_dotenv(parent_env)
-        api_key = os.environ.get("GEMINI_API_KEY")
-
-if api_key:
-    genai.configure(api_key=api_key)
 
 CANDIDATE_MODELS = [
     "models/gemini-flash-lite-latest",
@@ -67,111 +47,160 @@ def extract_code(raw_text: str) -> str:
     return match.group(1).strip() if match else raw_text.strip()
 
 
-def run_iverilog_simulation(src_file: Path, is_optimized: bool = False) -> tuple:
+def run_iverilog_verification(opt_file: Path, is_candidate: bool = False) -> tuple:
+    """Runs lockstep dual-DUT co-simulation with Icarus Verilog against golden reference model."""
     tb_file = TB_DIR / "riscv_alu_tb.v"
-    out_prefix = "riscv_optimized" if is_optimized else "riscv_baseline"
-    out_vvp = REPORTS_DIR / f"{out_prefix}_sim.vvp"
-    log_file = REPORTS_DIR / f"{out_prefix}_sim.log"
+    base_file = SRC_DIR / "riscv_alu_baseline.v"
+    out_vvp = REPORTS_DIR / ("riscv_cand_sim.vvp" if is_candidate else "riscv_sim.vvp")
+    log_file = REPORTS_DIR / ("riscv_cand_sim.log" if is_candidate else "riscv_sim.log")
 
-    cmd = ["iverilog", "-DDUMP_VCD"]
-    if is_optimized:
-        cmd.extend(["-D", "TEST_OPTIMIZED"])
-    cmd.extend(["-o", str(out_vvp), str(src_file), str(tb_file)])
+    cmd = [
+        "iverilog",
+        "-g2005-sv",
+        "-DDUMP_VCD",
+    ]
+    if is_candidate:
+        cmd.extend(["-DTEST_CANDIDATE"])
 
-    comp_res = subprocess.run(cmd, capture_output=True, text=True)
+    cmd.extend([
+        "-o", str(out_vvp),
+        str(base_file),
+        str(opt_file),
+        str(tb_file)
+    ])
+
+    comp_res = subprocess.run(cmd, capture_output=True, text=True, cwd=PROJECT_ROOT)
     if comp_res.returncode != 0:
-        return False, comp_res.stderr
+        return False, f"Compilation Error:\n{comp_res.stderr}\n{comp_res.stdout}"
 
-    sim_res = subprocess.run(["vvp", str(out_vvp)], capture_output=True, text=True)
+    sim_res = subprocess.run(["vvp", str(out_vvp)], capture_output=True, text=True, cwd=PROJECT_ROOT)
     write_file(log_file, sim_res.stdout)
 
-    passed = ("ALL RISC-V 32-BIT ALU TESTS PASSED!" in sim_res.stdout and sim_res.returncode == 0)
+    passed = (
+        "ALL 32-BIT RISC-V TESTS PASSED SUCCESSFULLY!" in sim_res.stdout
+        and sim_res.returncode == 0
+    )
     return passed, sim_res.stdout
 
 
-def profile_vcd_switching_activity(vcd_path: Path, is_optimized: bool = False) -> dict:
-    """Profiles switching activity on datapath inputs and internal execution units."""
+def profile_vcd_switching_activity(vcd_path: Path) -> dict:
+    """
+    Parses VCD hierarchy and counts bit transitions under identical stimulus.
+    Distinguishes input transitions to specific functional execution sub-units.
+    """
     if not vcd_path.exists():
-        return {"total_toggles": 0, "adder_input_toggles": 0, "shifter_input_toggles": 0}
+        return {}
 
-    var_map = {}
+    var_to_signal = {}
+    scope_stack = []
+
     with open(vcd_path, "r", encoding="utf-8", errors="ignore") as f:
         for line in f:
             line = line.strip()
-            if "$var" in line:
+            if line.startswith("$scope"):
+                parts = line.split()
+                if len(parts) >= 3:
+                    scope_stack.append(parts[2])
+            elif line.startswith("$upscope"):
+                if scope_stack:
+                    scope_stack.pop()
+            elif line.startswith("$var"):
                 parts = line.split()
                 if len(parts) >= 5:
                     var_id = parts[3]
                     var_name = parts[4]
-                    var_map[var_id] = var_name
-            if "$enddefinitions" in line:
+                    full_name = ".".join(scope_stack + [var_name])
+                    var_to_signal[var_id] = full_name
+            elif line.startswith("$enddefinitions"):
                 break
 
-    var_values = {}
-    total_toggles = 0
-    adder_toggles = 0
-    shifter_toggles = 0
+    signal_vals = {}
+    signal_toggles = {sname: 0 for sname in var_to_signal.values()}
 
     with open(vcd_path, "r", encoding="utf-8", errors="ignore") as f:
-        in_values = False
+        in_dump = False
         for line in f:
             line = line.strip()
             if "$enddefinitions" in line:
-                in_values = True
+                in_dump = True
                 continue
-            if not in_values or line.startswith(("#", "$", "r")):
+            if not in_dump or not line or line.startswith(("#", "$", "r")):
                 continue
 
-            # Multi-bit vector toggle (e.g. 'b101 !')
             if line.startswith("b"):
                 parts = line.split()
                 if len(parts) == 2:
                     val = parts[0][1:]
-                    var_id = parts[1]
-                    var_name = var_map.get(var_id, "")
-                    prev = var_values.get(var_id)
-                    if prev is not None:
-                        max_len = max(len(prev), len(val))
-                        diff = sum(1 for a, b in zip(prev.zfill(max_len), val.zfill(max_len)) if a != b)
-                        total_toggles += diff
-
-                        if is_optimized:
-                            if var_name in ("arith_a", "arith_b"):
-                                adder_toggles += diff
-                            elif var_name in ("shift_a", "shift_amt"):
-                                shifter_toggles += diff
-                        else:
-                            # In baseline, inputs 'a' and 'b' drive adder and shifter directly
-                            if var_name in ("a", "b"):
-                                adder_toggles += diff
-                                shifter_toggles += diff
-
-                    var_values[var_id] = val
-
-            # Single bit toggle
-            elif line.startswith(("0", "1", "x", "z")) and not line.startswith("b"):
+                    vid = parts[1]
+                    sname = var_to_signal.get(vid)
+                    if sname:
+                        prev = signal_vals.get(vid)
+                        if prev is not None:
+                            max_len = max(len(prev), len(val))
+                            diff = sum(1 for a, b in zip(prev.zfill(max_len), val.zfill(max_len)) if a != b)
+                            signal_toggles[sname] += diff
+                        signal_vals[vid] = val
+            elif line.startswith(("0", "1", "x", "z")):
                 val = line[0]
-                var_id = line[1:]
-                prev = var_values.get(var_id)
-                if prev is not None and prev != val:
-                    total_toggles += 1
-                var_values[var_id] = val
+                vid = line[1:]
+                sname = var_to_signal.get(vid)
+                if sname:
+                    prev = signal_vals.get(vid)
+                    if prev is not None and prev != val:
+                        signal_toggles[sname] += 1
+                    signal_vals[vid] = val
+
+    def get_toggles(name_pattern: str) -> int:
+        for k, v in signal_toggles.items():
+            if k.endswith(name_pattern):
+                return v
+        return 0
+
+    # Baseline signals (un-isolated)
+    base_a = get_toggles("dut_base.a")
+    base_b = get_toggles("dut_base.b")
+    base_shamt = get_toggles("dut_base.shamt")
+    base_ctrl = get_toggles("dut_base.alu_ctrl")
+    base_out = get_toggles("dut_base.alu_out")
+    base_zero = get_toggles("dut_base.zero")
+
+    # Optimized signals (isolated)
+    opt_a = get_toggles("dut_opt.a")
+    opt_b = get_toggles("dut_opt.b")
+    opt_ctrl = get_toggles("dut_opt.alu_ctrl")
+    opt_arith_a = get_toggles("dut_opt.arith_a")
+    opt_arith_b = get_toggles("dut_opt.arith_b")
+    opt_shift_a = get_toggles("dut_opt.shift_a")
+    opt_shift_amt = get_toggles("dut_opt.shift_amt")
+    opt_logic_a = get_toggles("dut_opt.logic_a")
+    opt_logic_b = get_toggles("dut_opt.logic_b")
+    opt_out = get_toggles("dut_opt.alu_out")
+    opt_zero = get_toggles("dut_opt.zero")
 
     return {
-        "total_toggles": total_toggles,
-        "adder_input_toggles": adder_toggles,
-        "shifter_input_toggles": shifter_toggles
+        "baseline": {
+            "primary_inputs": base_a + base_b + base_ctrl,
+            "adder_inputs": base_a + base_b,
+            "shifter_inputs": base_a + base_shamt,
+            "logic_inputs": base_a + base_b,
+            "outputs": base_out + base_zero,
+        },
+        "optimized": {
+            "primary_inputs": opt_a + opt_b + opt_ctrl,
+            "adder_inputs": opt_arith_a + opt_arith_b,
+            "shifter_inputs": opt_shift_a + opt_shift_amt,
+            "logic_inputs": opt_logic_a + opt_logic_b,
+            "outputs": opt_out + opt_zero,
+        }
     }
 
 
 def run_yosys_synthesis(verilog_file: Path, top_module: str) -> dict:
-    print(f"[Synthesis] Synthesizing {verilog_file.name} ({top_module}) with Yosys...")
     stat_file = REPORTS_DIR / f"{top_module}_synth.stat"
-
-    yosys_script = f"read_verilog {verilog_file.as_posix()}; synth -noabc -top {top_module}; stat -tech cmos"
     yosys_cmd = shutil.which("yosys") or shutil.which("yowasp-yosys") or "yosys"
 
-    proc = subprocess.run([yosys_cmd, "-p", yosys_script], capture_output=True, text=True)
+    yosys_script = f"read_verilog {verilog_file.as_posix()}; synth -noabc -top {top_module}; stat"
+    proc = subprocess.run([yosys_cmd, "-p", yosys_script], capture_output=True, text=True, cwd=PROJECT_ROOT)
     raw_output = proc.stdout + "\n" + proc.stderr
     write_file(stat_file, raw_output)
 
@@ -190,7 +219,6 @@ def parse_yosys_stats(output: str, module_name: str) -> dict:
         "public_wires": 0,
         "public_wire_bits": 0,
         "cells": 0,
-        "transistors": 0,
         "cell_details": {}
     }
 
@@ -217,10 +245,6 @@ def parse_yosys_stats(output: str, module_name: str) -> dict:
     if m_cells:
         stats["cells"] = int(m_cells.group(1))
 
-    m_trans = re.search(r"Estimated number of transistors:\s*(\d+)", output)
-    if m_trans:
-        stats["transistors"] = int(m_trans.group(1))
-
     cell_lines = re.findall(r"^\s+(\d+)\s+(\$_\w+_?|\$\w+)\s*$", block, re.MULTILINE)
     for count, name in cell_lines:
         stats["cell_details"][name] = int(count)
@@ -228,7 +252,7 @@ def parse_yosys_stats(output: str, module_name: str) -> dict:
     return stats
 
 
-def generate_ppa_report(b_stats: dict, o_stats: dict, b_prof: dict, o_prof: dict) -> str:
+def generate_ppa_report(b_stats: dict, o_stats: dict, activity: dict) -> str:
     def delta(base, opt):
         if base == 0:
             return "0.0%"
@@ -236,113 +260,243 @@ def generate_ppa_report(b_stats: dict, o_stats: dict, b_prof: dict, o_prof: dict
         sign = "+" if diff > 0 else ""
         return f"{sign}{diff:.1f}%"
 
-    b_area_um2 = b_stats["cells"] * 8.5
-    o_area_um2 = o_stats["cells"] * 8.5
+    b_act = activity.get("baseline", {})
+    o_act = activity.get("optimized", {})
 
     lines = [
         "========================================================================================",
-        "          32-BIT RISC-V (RV32I) ALU: AI-POWERED PPA BENCHMARK & FOOTPRINT REPORT        ",
+        "          32-BIT RISC-V (RV32I) ALU: PPA & SWITCHING ACTIVITY BENCHMARK REPORT          ",
         "========================================================================================",
-        f"{'Design Metric':<36} | {'RV32I Baseline':<15} | {'AI-Optimized':<15} | {'Delta':<10}",
+        f"{'Design Metric':<40} | {'RV32I Baseline':<15} | {'AI-Optimized':<15} | {'Delta':<10}",
         "----------------------------------------------------------------------------------------",
-        f"{'32-bit Adder Input Transitions':<36} | {b_prof['adder_input_toggles']:<15} | {o_prof['adder_input_toggles']:<15} | {delta(b_prof['adder_input_toggles'], o_prof['adder_input_toggles']):<10}",
-        f"{'32-bit Shifter Input Transitions':<36} | {b_prof['shifter_input_toggles']:<15} | {o_prof['shifter_input_toggles']:<15} | {delta(b_prof['shifter_input_toggles'], o_prof['shifter_input_toggles']):<10}",
-        f"{'Total Synthesized Logic Cells':<36} | {b_stats['cells']:<15} | {o_stats['cells']:<15} | {delta(b_stats['cells'], o_stats['cells']):<10}",
-        f"{'Estimated Silicon Area (um^2)':<36} | {b_area_um2:<15.1f} | {o_area_um2:<15.1f} | {delta(b_area_um2, o_area_um2):<10}",
-        f"{'Interconnect Routing Wires':<36} | {b_stats['wires']:<15} | {o_stats['wires']:<15} | {delta(b_stats['wires'], o_stats['wires']):<10}",
-        f"{'Total Wire Bits':<36} | {b_stats['wire_bits']:<15} | {o_stats['wire_bits']:<15} | {delta(b_stats['wire_bits'], o_stats['wire_bits']):<10}",
+        "1. Dynamic Switching Activity Estimates (Signal Bit Transitions under Identical Stimulus):",
+        f"  - Primary ALU Input Transitions        | {b_act.get('primary_inputs', 0):<15} | {o_act.get('primary_inputs', 0):<15} | {delta(b_act.get('primary_inputs', 0), o_act.get('primary_inputs', 0)):<10}",
+        f"  - 32-bit Adder Input Transitions       | {b_act.get('adder_inputs', 0):<15} | {o_act.get('adder_inputs', 0):<15} | {delta(b_act.get('adder_inputs', 0), o_act.get('adder_inputs', 0)):<10}",
+        f"  - Barrel Shifter Input Transitions     | {b_act.get('shifter_inputs', 0):<15} | {o_act.get('shifter_inputs', 0):<15} | {delta(b_act.get('shifter_inputs', 0), o_act.get('shifter_inputs', 0)):<10}",
+        f"  - Logic Datapath Input Transitions     | {b_act.get('logic_inputs', 0):<15} | {o_act.get('logic_inputs', 0):<15} | {delta(b_act.get('logic_inputs', 0), o_act.get('logic_inputs', 0)):<10}",
+        f"  - ALU Output Bit Transitions           | {b_act.get('outputs', 0):<15} | {o_act.get('outputs', 0):<15} | {delta(b_act.get('outputs', 0), o_act.get('outputs', 0)):<10}",
         "----------------------------------------------------------------------------------------",
-        "Synthesized CMOS Technology Primitive Gate Counts:"
+        "2. Generic Technology-Independent Synthesis Gate Complexity (Yosys synth -noabc):",
+        f"  - Total Synthesized Cells              | {b_stats.get('cells', 0):<15} | {o_stats.get('cells', 0):<15} | {delta(b_stats.get('cells', 0), o_stats.get('cells', 0)):<10}",
+        f"  - Interconnect Routing Wires           | {b_stats.get('wires', 0):<15} | {o_stats.get('wires', 0):<15} | {delta(b_stats.get('wires', 0), o_stats.get('wires', 0)):<10}",
+        f"  - Total Wire Bits                      | {b_stats.get('wire_bits', 0):<15} | {o_stats.get('wire_bits', 0):<15} | {delta(b_stats.get('wire_bits', 0), o_stats.get('wire_bits', 0)):<10}",
+        f"  - Public Interface Wires               | {b_stats.get('public_wires', 0):<15} | {o_stats.get('public_wires', 0):<15} | {delta(b_stats.get('public_wires', 0), o_stats.get('public_wires', 0)):<10}",
+        "----------------------------------------------------------------------------------------",
+        "3. Technology Primitive Gate Breakdown:"
     ]
 
-    all_cells = sorted(set(list(b_stats["cell_details"].keys()) + list(o_stats["cell_details"].keys())))
+    all_cells = sorted(set(list(b_stats.get("cell_details", {}).keys()) + list(o_stats.get("cell_details", {}).keys())))
     for ct in all_cells:
-        b_c = b_stats["cell_details"].get(ct, 0)
-        o_c = o_stats["cell_details"].get(ct, 0)
-        lines.append(f"  - {ct:<32} | {b_c:<15} | {o_c:<15} | {delta(b_c, o_c):<10}")
+        b_c = b_stats.get("cell_details", {}).get(ct, 0)
+        o_c = o_stats.get("cell_details", {}).get(ct, 0)
+        lines.append(f"  - {ct:<36} | {b_c:<15} | {o_c:<15} | {delta(b_c, o_c):<10}")
+
+    adder_d = delta(b_act.get('adder_inputs', 0), o_act.get('adder_inputs', 0))
+    shifter_d = delta(b_act.get('shifter_inputs', 0), o_act.get('shifter_inputs', 0))
+    wire_d = delta(b_stats.get('wires', 0), o_stats.get('wires', 0))
 
     lines.append("========================================================================================")
-    lines.append("\n[PPA ARCHITECTURAL ANALYSIS]")
+    lines.append("\n[ENGINEERING ANALYSIS & ARCHITECTURAL VERDICT]")
     lines.append(
-        f"1. Dynamic Switching Power Suppression ({delta(b_prof['adder_input_toggles'], o_prof['adder_input_toggles'])} in Adder):\n"
-        f"   Operand isolation freezes inputs to the 32-bit carry chain and barrel shifter during\n"
-        f"   logical operations (AND, OR, XOR), completely eliminating parasitic dynamic switching (P_dyn = alpha * C * V^2 * f).\n"
-        f"2. Routing Congestion & Cell Optimization:\n"
-        f"   Achieved a {delta(b_stats['wires'], o_stats['wires'])} reduction in interconnect wires and {delta(b_stats['cells'], o_stats['cells'])} reduction in logic cell area\n"
-        f"   by unifying ADD, SUB, SLT, and SLTU into a single 32-bit two's-complement arithmetic block."
+        f"1. Dynamic Switching Activity Suppression:\n"
+        f"   - Adder inputs achieved {adder_d} transition toggle reduction.\n"
+        f"   - Shifter inputs achieved {shifter_d} transition toggle reduction.\n"
+        f"   - Mechanism: Operand isolation (input gating) forces arithmetic, shifter, and logic inputs\n"
+        f"     to zero when their respective execution blocks are inactive, preventing parasitic toggles\n"
+        f"     through high-capacitance carry chains and shift matrices.\n"
+        f"2. Interconnect & Area Trade-Off:\n"
+        f"   - Achieved {wire_d} reduction in internal routing wires.\n"
+        f"   - Cell count changed by {delta(b_stats.get('cells', 0), o_stats.get('cells', 0))}: Operand isolation adds lightweight gating multiplexers\n"
+        f"     on sub-block inputs, trading a nominal gate overhead for massive dynamic power savings.\n"
+        f"3. Honest Physical Characterization Disclaimer:\n"
+        f"   - The transition counts reported above represent simulated dynamic switching activity,\n"
+        f"     not milliwatts (mW) of physical power.\n"
+        f"   - Absolute physical power (static leakage + dynamic internal/switching) and silicon area (um^2)\n"
+        f"     require target standard cell library models (.lib) and post-route parasitic extraction (SPEF/DSPF)."
     )
     lines.append("========================================================================================")
-
-    lines.append("\n" + "#" * 88)
-    lines.append("                 READY-TO-USE RESUME BULLET POINTS & CV DESCRIPTIONS                   ")
-    lines.append("#" * 88)
-    lines.append(
-        f"""
-• AI-Driven ASIC PPA Optimization for RISC-V (RV32I) Core:
-  - Architected and automated an AI-driven PPA (Power-Performance-Area) optimization pipeline for a 32-bit
-    RISC-V (RV32I) ALU in Verilog (IEEE 1364-2001), covering 10 standard integer computational operations.
-  - Implemented architectural Operand Isolation and unified two's-complement arithmetic resource sharing,
-    achieving a {delta(b_prof['adder_input_toggles'], o_prof['adder_input_toggles'])} suppression in adder input switching transitions and {delta(b_stats['wires'], o_stats['wires'])} reduction in routing wires.
-  - Integrated Google Gemini with Icarus Verilog regression suites (22/22 tests verified) and Yosys synthesis
-    to automate structural refactoring and physical standard-cell area estimation.
-  - Performed quantitative Value Change Dump (VCD) toggle analysis to empirically validate dynamic power
-    reduction across 32-bit carry chains and barrel shifters.
-"""
-    )
-    lines.append("#" * 88)
 
     return "\n".join(lines)
 
 
+def generate_candidate(preferred_model: str = None) -> tuple:
+    """Invokes Gemini API to generate an optimized RTL candidate."""
+    import dotenv
+    if ENV_FILE.exists():
+        dotenv.load_dotenv(ENV_FILE)
+    api_key = os.environ.get("GEMINI_API_KEY")
+
+    if not api_key:
+        print("[ERROR] GEMINI_API_KEY is not set in environment or .env file.")
+        print("Please configure GEMINI_API_KEY in .env to use AI candidate generation.")
+        sys.exit(1)
+
+    import google.generativeai as genai
+    from google.api_core import exceptions as google_exceptions
+
+    genai.configure(api_key=api_key)
+
+    base_file = SRC_DIR / "riscv_alu_baseline.v"
+    baseline_code = read_file(base_file)
+
+    prompt = f"""
+You are a senior digital IC design and low-power ASIC/FPGA RTL engineer.
+Below is a 32-bit RISC-V (RV32I) baseline ALU written in standard Verilog (IEEE 1364-2001).
+
+```verilog
+{baseline_code}
+```
+
+Task:
+Generate a structurally optimized, low-power version of this ALU named `riscv_alu_candidate`.
+You MUST preserve exact functional equivalence with `riscv_alu_baseline` across all 10 RV32I integer ALU operations:
+- ADD (4'b0000), SUB (4'b0001), SLL (4'b0010), SLT (4'b0011), SLTU (4'b0100)
+- XOR (4'b0101), SRL (4'b0110), SRA (4'b0111), OR (4'b1000), AND (4'b1001)
+- Default: alu_out = 32'b0
+- zero flag: (alu_out == 32'b0)
+
+Required Architectural Optimizations:
+1. **Operand Isolation (Input Gating)**:
+   - Arithmetic inputs (`arith_a`, `arith_b`) must be gated to 0 when non-arithmetic ops execute (`is_arith = (alu_ctrl == 4'b0000) || (alu_ctrl == 4'b0001) || (alu_ctrl == 4'b0011) || (alu_ctrl == 4'b0100)`).
+   - Shifter inputs (`shift_a`, `shift_amt`) must be gated to 0 when non-shift ops execute (`is_shift = (alu_ctrl == 4'b0010) || (alu_ctrl == 4'b0110) || (alu_ctrl == 4'b0111)`).
+   - Logic inputs (`logic_a`, `logic_b`) must be gated to 0 when non-logic ops execute.
+2. **Unified Resource-Shared Adder/Subtractor/Comparator**:
+   - Unify ADD, SUB, SLT, and SLTU into a single 33-bit adder:
+     `wire sub_op = is_arith && (alu_ctrl != 4'b0000);`
+     `wire [31:0] b_comp = sub_op ? ~arith_b : arith_b;`
+     `wire [32:0] add_sub_res = arith_a + b_comp + sub_op;`
+   - Signed comparison (SLT): `slt_res = (arith_a[31] != arith_b[31]) ? arith_a[31] : add_sub_res[31];`
+   - Unsigned comparison (SLTU): `sltu_res = ~add_sub_res[32];`
+3. **Module Name**:
+   - The module header MUST be `module riscv_alu_candidate (`.
+
+Output Format: Return ONLY clean Verilog source code inside a single ```verilog ... ``` code block.
+"""
+
+    models_to_try = [preferred_model] if preferred_model else CANDIDATE_MODELS
+    for model_name in models_to_try:
+        try:
+            print(f"[AI Orchestrator] Prompting Gemini model: {model_name}...")
+            model = genai.GenerativeModel(model_name)
+            response = model.generate_content(prompt)
+            code = extract_code(response.text)
+            print(f"[AI Orchestrator] Successfully received candidate from {model_name}!")
+            return code, model_name
+        except Exception as e:
+            print(f"[WARN] Failed with {model_name}: {e}. Trying next...")
+
+    print("[ERROR] All Gemini models failed.")
+    sys.exit(1)
+
+
 def main():
-    parser = argparse.ArgumentParser(description="32-bit RISC-V ALU PPA Optimization Pipeline")
-    parser.add_argument("--use-existing", action="store_true", help="Skip Gemini API call and use existing src/riscv_alu_optimized.v")
-    parser.add_argument("--model", type=str, default=None, help="Specific Gemini model name to use")
+    parser = argparse.ArgumentParser(description="32-bit RISC-V ALU PPA & Switching Activity Optimization Pipeline")
+    parser.add_argument("--generate", action="store_true", help="Generate a new AI candidate into src/riscv_alu_candidate.v")
+    parser.add_argument("--model", type=str, default=None, help="Specific Gemini model name to use with --generate")
+    parser.add_argument("--promote-candidate", action="store_true", help="Promote verified candidate to src/riscv_alu_optimized.v")
+    parser.add_argument("--skip-synthesis", action="store_true", help="Skip Yosys synthesis (simulation & toggle profiling only)")
     args = parser.parse_args()
 
     print("========================================================================")
-    print("   32-BIT RISC-V (RV32I) ALU AI PPA OPTIMIZATION & SYNTHESIS PIPELINE   ")
+    print("   32-BIT RISC-V (RV32I) ALU: VERIFICATION, ACTIVITY & SYNTHESIS        ")
     print("========================================================================")
 
     base_file = SRC_DIR / "riscv_alu_baseline.v"
     opt_file = SRC_DIR / "riscv_alu_optimized.v"
+    cand_file = SRC_DIR / "riscv_alu_candidate.v"
 
-    # Step 1: Baseline Verification + VCD Profile
-    print("\n--- STEP 1: Baseline RISC-V ALU Verification & VCD Profile ---")
-    base_pass, base_log = run_iverilog_simulation(base_file, is_optimized=False)
-    if not base_pass:
-        print(f"[ERROR] Baseline verification failed:\n{base_log}")
+    # Handle Candidate Promotion
+    if args.promote_candidate:
+        if not cand_file.exists():
+            print(f"[ERROR] No candidate file found at {cand_file} to promote.")
+            sys.exit(1)
+        print(f"[Promotion] Verifying candidate {cand_file.name} before promoting...")
+        pass_check, log = run_iverilog_verification(cand_file, is_candidate=True)
+        if not pass_check:
+            print(f"[ERROR] Candidate failed verification! Refusing to promote:\n{log}")
+            sys.exit(1)
+        # Rename module name inside candidate to riscv_alu_optimized
+        cand_code = read_file(cand_file)
+        promoted_code = re.sub(r"\bmodule\s+riscv_alu_candidate\b", "module riscv_alu_optimized", cand_code)
+        write_file(opt_file, promoted_code)
+        print(f"[SUCCESS] Candidate successfully promoted to {opt_file}!")
+        return
+
+    # Handle AI Candidate Generation
+    if args.generate:
+        print("\n--- Generating AI Optimization Candidate ---")
+        cand_code, active_model = generate_candidate(args.model)
+        write_file(cand_file, cand_code)
+        print(f"[Saved] Candidate written to {cand_file}")
+
+        print("\n--- Verifying AI Candidate with Icarus Verilog ---")
+        passed, sim_log = run_iverilog_verification(cand_file, is_candidate=True)
+        if passed:
+            print(f"[SUCCESS] Candidate passed all functional verification tests!")
+            print(f"[INFO] To promote this candidate to validated RTL, run:")
+            print(f"       python scripts/optimize_riscv.py --promote-candidate")
+        else:
+            print(f"[ERROR] Candidate failed verification:\n{sim_log}")
+            sys.exit(1)
+        return
+
+    # Standard Deterministic Offline Workflow
+    if not base_file.exists():
+        print(f"[ERROR] Baseline ALU not found at {base_file}")
         sys.exit(1)
-    print(f"[SUCCESS] {base_file.name} passed all 22 test vectors!")
-    base_vcd = REPORTS_DIR / "riscv_baseline_activity.vcd"
-    base_prof = profile_vcd_switching_activity(base_vcd, is_optimized=False)
-    print(f"[Profiling] Baseline adder input transitions: {base_prof['adder_input_toggles']} toggles")
-
-    # Step 2: Verification of Optimized Design
-    print("\n--- STEP 2: Optimized RISC-V ALU Verification & VCD Profile ---")
-    opt_pass, opt_log = run_iverilog_simulation(opt_file, is_optimized=True)
-    if not opt_pass:
-        print(f"[ERROR] Optimized design failed verification:\n{opt_log}")
+    if not opt_file.exists():
+        print(f"[ERROR] Optimized ALU not found at {opt_file}")
         sys.exit(1)
-    print(f"[SUCCESS] {opt_file.name} passed all 22 test vectors with zero regressions!")
-    opt_vcd = REPORTS_DIR / "riscv_optimized_activity.vcd"
-    opt_prof = profile_vcd_switching_activity(opt_vcd, is_optimized=True)
-    print(f"[Profiling] Optimized adder input transitions: {opt_prof['adder_input_toggles']} toggles")
 
-    # Step 3: Yosys Synthesis & Benchmarking
-    print("\n--- STEP 3: Yosys Synthesis & CMOS Standard-Cell Mapping ---")
-    base_stats = run_yosys_synthesis(base_file, "riscv_alu_baseline")
-    opt_stats = run_yosys_synthesis(opt_file, "riscv_alu_optimized")
+    # Step 1: Functional Co-Simulation Verification
+    print("\n--- STEP 1: Dual-DUT Lockstep Co-Simulation Verification ---")
+    print(f"[Simulation] Compiling baseline and optimized ALUs against golden reference...")
+    passed, sim_log = run_iverilog_verification(opt_file, is_candidate=False)
+    if not passed:
+        print(f"[ERROR] Verification failed:\n{sim_log}")
+        sys.exit(1)
+    print(f"[SUCCESS] Lockstep co-simulation passed 6,056/6,056 test cases with zero regressions!")
 
-    # Step 4: PPA Report & Resume Output
-    print("\n--- STEP 4: Generating PPA Benchmark Report & Resume Documentation ---")
-    ppa_report = generate_ppa_report(base_stats, opt_stats, base_prof, opt_prof)
-    print("\n" + ppa_report)
+    # Step 2: VCD Dynamic Switching Activity Profiling
+    print("\n--- STEP 2: VCD Dynamic Switching Activity Profiling ---")
+    vcd_path = REPORTS_DIR / "riscv_activity.vcd"
+    activity = profile_vcd_switching_activity(vcd_path)
+    if activity:
+        b_add = activity["baseline"]["adder_inputs"]
+        o_add = activity["optimized"]["adder_inputs"]
+        d_add = ((o_add - b_add) / b_add) * 100.0 if b_add else 0.0
+        print(f"[Activity] Baseline Adder Input Transitions : {b_add:,} toggles")
+        print(f"[Activity] Optimized Adder Input Transitions: {o_add:,} toggles ({d_add:+.1f}%)")
 
-    report_file = REPORTS_DIR / "riscv_ppa_report.txt"
-    write_file(report_file, ppa_report)
-    print(f"\n[Report Saved] Full PPA report & resume bullets saved to {report_file}")
-    print("\n[COMPLETE] 32-bit RISC-V ALU optimization pipeline finished successfully.")
+        b_sh = activity["baseline"]["shifter_inputs"]
+        o_sh = activity["optimized"]["shifter_inputs"]
+        d_sh = ((o_sh - b_sh) / b_sh) * 100.0 if b_sh else 0.0
+        print(f"[Activity] Baseline Shifter Input Transitions: {b_sh:,} toggles")
+        print(f"[Activity] Optimized Shifter Input Transitions: {o_sh:,} toggles ({d_sh:+.1f}%)")
+    else:
+        print("[WARN] VCD file not found or empty.")
+
+    # Step 3: Yosys Technology-Independent Synthesis
+    base_stats = {}
+    opt_stats = {}
+    if not args.skip_synthesis:
+        print("\n--- STEP 3: Yosys Synthesis & Gate Complexity Analysis ---")
+        base_stats = run_yosys_synthesis(base_file, "riscv_alu_baseline")
+        opt_stats = run_yosys_synthesis(opt_file, "riscv_alu_optimized")
+        print(f"[Synthesis] Baseline cell count : {base_stats['cells']} cells, {base_stats['wires']} wires")
+        print(f"[Synthesis] Optimized cell count: {opt_stats['cells']} cells, {opt_stats['wires']} wires")
+    else:
+        print("\n--- STEP 3: Synthesis skipped (--skip-synthesis specified) ---")
+
+    # Step 4: Comparative PPA Report Generation
+    print("\n--- STEP 4: Generating Benchmark Report ---")
+    report = generate_ppa_report(base_stats, opt_stats, activity)
+    print("\n" + report)
+
+    report_path = REPORTS_DIR / "riscv_ppa_report.txt"
+    write_file(report_path, report)
+    print(f"\n[Report Saved] Benchmark report saved to {report_path}")
+    print("\n[COMPLETE] 32-bit RISC-V ALU pipeline finished successfully.")
 
 
 if __name__ == "__main__":
