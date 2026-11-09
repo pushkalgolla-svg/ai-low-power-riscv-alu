@@ -1,0 +1,64 @@
+name: RTL Verification & Low-Power PPA CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  verilog-ci:
+    name: Icarus Verilog Simulation & Synthesis CI
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install System EDA Tools (Icarus Verilog & Yosys)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y iverilog yosys
+          mkdir -p reports
+
+      - name: Install Python Dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Verify 8-Bit ALU (Icarus Verilog)
+        run: |
+          echo "=== Compiling & Running 8-bit ALU Testbench ==="
+          iverilog -g2005-sv -o reports/alu_sim.vvp src/alu_baseline.v src/alu_optimized.v tb/alu_tb.v
+          vvp reports/alu_sim.vvp
+
+      - name: Verify 32-Bit RISC-V (RV32I) ALU (Icarus Verilog)
+        run: |
+          echo "=== Compiling & Running 32-bit RISC-V ALU Testbench ==="
+          iverilog -g2005-sv -DDUMP_VCD -o reports/riscv_sim.vvp src/riscv_alu_baseline.v src/riscv_alu_optimized.v tb/riscv_alu_tb.v
+          vvp reports/riscv_sim.vvp
+
+      - name: Run 8-Bit Pipeline Orchestrator (Offline Mode)
+        run: |
+          echo "=== Executing scripts/optimize.py ==="
+          python scripts/optimize.py
+
+      - name: Run 32-Bit RISC-V Pipeline Orchestrator (Offline Mode)
+        run: |
+          echo "=== Executing scripts/optimize_riscv.py ==="
+          python scripts/optimize_riscv.py
+
+      - name: Verify Generated Reports & Artifacts
+        run: |
+          echo "=== Verifying Artifact Generation ==="
+          test -f reports/comparison_report.txt
+          test -f reports/riscv_ppa_report.txt
+          test -f reports/riscv_activity.vcd
+          echo "All reports and VCD traces successfully generated and validated!"

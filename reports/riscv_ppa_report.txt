@@ -4,11 +4,11 @@
 Design Metric                            | RV32I Baseline  | AI-Optimized    | Delta     
 ----------------------------------------------------------------------------------------
 1. Dynamic Switching Activity Estimates (Signal Bit Transitions under Identical Stimulus):
-  - Primary ALU Input Transitions        | 194405          | 194405          | 0.0%      
-  - 32-bit Adder Input Transitions       | 184172          | 70512           | -61.7%    
-  - Barrel Shifter Input Transitions     | 100373          | 30945           | -69.2%    
-  - Logic Datapath Input Transitions     | 184172          | 54089           | -70.6%    
-  - ALU Output Bit Transitions           | 61103           | 61103           | 0.0%      
+  - Primary ALU Input Transitions        | 3050            | 3050            | 0.0%      
+  - 32-bit Adder Input Transitions       | 2851            | 1328            | -53.4%    
+  - Barrel Shifter Input Transitions     | 1494            | 713             | -52.3%    
+  - Logic Datapath Input Transitions     | 2851            | 2352            | -17.5%    
+  - ALU Output Bit Transitions           | 1555            | 1555            | 0.0%      
 ----------------------------------------------------------------------------------------
 2. Generic Technology-Independent Synthesis Gate Complexity (Yosys synth -noabc):
   - Total Synthesized Cells              | 1485            | 1499            | +0.9%     
@@ -26,8 +26,8 @@ Design Metric                            | RV32I Baseline  | AI-Optimized    | D
 
 [ENGINEERING ANALYSIS & ARCHITECTURAL VERDICT]
 1. Dynamic Switching Activity Suppression:
-   - Adder inputs achieved -61.7% transition toggle reduction.
-   - Shifter inputs achieved -69.2% transition toggle reduction.
+   - Adder inputs achieved -53.4% transition toggle reduction.
+   - Shifter inputs achieved -52.3% transition toggle reduction.
    - Mechanism: Operand isolation (input gating) forces arithmetic, shifter, and logic inputs
      to zero when their respective execution blocks are inactive, preventing parasitic toggles
      through high-capacitance carry chains and shift matrices.

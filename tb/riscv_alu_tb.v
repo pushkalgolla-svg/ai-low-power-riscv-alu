@@ -1,4 +1,4 @@
-`timescale 1ns / 1ps
+`timescale 1ns/1ps
 
 module riscv_alu_tb;
 
@@ -69,28 +69,41 @@ module riscv_alu_tb;
 
     task apply_and_check;
         input [255:0] test_name;
+        reg has_unknown;
         begin
             #10; // Propagation delay
             golden_reference(a, b, alu_ctrl, ref_out, ref_zero);
 
-            if (base_out === ref_out && opt_out === ref_out &&
+            // Reject unknown (X/Z) bits on all inputs and outputs
+            has_unknown = (^a === 1'bx) || (^b === 1'bx) || (^alu_ctrl === 1'bx) ||
+                          (^base_out === 1'bx) || (^opt_out === 1'bx) ||
+                          (base_zero === 1'bx) || (opt_zero === 1'bx);
+
+            if (!has_unknown &&
+                base_out === ref_out && opt_out === ref_out &&
                 base_zero === ref_zero && opt_zero === ref_zero) begin
                 pass_count = pass_count + 1;
             end else begin
                 fail_count = fail_count + 1;
-                $display("[FAIL] %s | Ctrl=%b, A=0x%08h, B=0x%08h", test_name, alu_ctrl, a, b);
-                $display("       Reference: Out=0x%08h, Zero=%b", ref_out, ref_zero);
-                $display("       Baseline : Out=0x%08h, Zero=%b", base_out, base_zero);
-                $display("       Optimized: Out=0x%08h, Zero=%b", opt_out, opt_zero);
+                if (has_unknown) begin
+                    $display("[FAIL - UNKNOWN VALUE X/Z] %s | Ctrl=%b, A=0x%08h, B=0x%08h", test_name, alu_ctrl, a, b);
+                    $display("       BaseOut=0x%08h (Z=%b), OptOut=0x%08h (Z=%b)", base_out, base_zero, opt_out, opt_zero);
+                end else begin
+                    $display("[FAIL - MISMATCH] %s | Ctrl=%b, A=0x%08h, B=0x%08h", test_name, alu_ctrl, a, b);
+                    $display("       Reference: Out=0x%08h, Zero=%b", ref_out, ref_zero);
+                    $display("       Baseline : Out=0x%08h, Zero=%b", base_out, base_zero);
+                    $display("       Optimized: Out=0x%08h, Zero=%b", opt_out, opt_zero);
+                end
             end
         end
     endtask
 
-    // Helper function for corner values
+    // Helper function for corner values with safe bit-masking and default return
     function [31:0] get_corner_val;
         input integer idx;
         begin
-            case (idx % 8)
+            get_corner_val = 32'h0000_0000;
+            case (idx & 32'd7)
                 0: get_corner_val = 32'h0000_0000;
                 1: get_corner_val = 32'h0000_0001;
                 2: get_corner_val = 32'hFFFF_FFFF; // -1
@@ -99,6 +112,7 @@ module riscv_alu_tb;
                 5: get_corner_val = 32'hAAAA_AAAA;
                 6: get_corner_val = 32'h5555_5555;
                 7: get_corner_val = 32'h1234_5678;
+                default: get_corner_val = 32'h0000_0000;
             endcase
         end
     endfunction
@@ -106,19 +120,13 @@ module riscv_alu_tb;
     integer i, j, op;
 
     initial begin
-`ifdef DUMP_VCD
-        $dumpfile("reports/riscv_activity.vcd");
-        $dumpvars(0, dut_base);
-        $dumpvars(0, dut_opt);
-`endif
-
         $display("==================================================================");
         $display("   STARTING EXPANDED 32-BIT RISC-V (RV32I) ALU VERIFICATION       ");
         $display("   Testing: Baseline vs Optimized vs Independent Golden Model     ");
         $display("==================================================================");
 
         // --- 1. DIRECTED CORNER-CASE TESTS FOR EVERY OPCODE ---
-        $display("[INFO] Running exhaustive corner-case combinations...");
+        $display("[INFO] Running exhaustive corner-case combinations (1,024 vectors)...");
 
         for (op = 0; op < 16; op = op + 1) begin
             alu_ctrl = op[3:0];
@@ -185,7 +193,7 @@ module riscv_alu_tb;
         a = 32'h8000_0000; b = 32'h0000_0001; apply_and_check("SUB: MinNeg - 1 overflows to MaxPos");
 
         // --- 3. PSEUDO-RANDOM EXTENSIVE STRESS TESTING ---
-        $display("[INFO] Running 5,000 randomized test vectors across all 16 opcodes...");
+        $display("[INFO] Running 5,000 randomized test vectors genuinely exercising all operations...");
         for (i = 0; i < 5000; i = i + 1) begin
             // 20% of the time, bias toward corner values; 80% uniform random
             if ((i % 5) == 0) begin
@@ -200,25 +208,45 @@ module riscv_alu_tb;
                 b = {$random, $random};
             end
 
-            alu_ctrl = $random % 16;
+            // Genuinely exercise every supported operation:
+            // 4,500 tests (90%) thoroughly test all 10 supported operations (each gets exactly 450 tests)
+            // 500 tests (10%) test default/invalid opcode space (10..15)
+            if (i < 4500) begin
+                alu_ctrl = (i % 10);
+            end else begin
+                alu_ctrl = 4'd10 + ((i - 4500) % 6);
+            end
+
             apply_and_check("Random Stress Vector");
         end
 
-        // --- 4. CONTROLLED REPRODUCIBLE SWITCHING ACTIVITY WORKLOAD ---
-        $display("[INFO] Executing switching-activity workload profiling trace (100 cycles)...");
+        // --- 4. SEPARATE DEDICATED SWITCHING-ACTIVITY WORKLOAD PROFILING ---
+        $display("[INFO] Executing dedicated switching-activity workload profiling trace (100 cycles)...");
+`ifdef DUMP_VCD
+        $dumpfile("reports/riscv_activity.vcd");
+        $dumpvars(0, dut_base);
+        $dumpvars(0, dut_opt);
+`endif
+        // Settle initial state
+        a = 32'hA5A5_A5A5;
+        b = 32'h5A5A_5A5A;
+        alu_ctrl = 4'b0000;
+        #10;
+
         for (i = 0; i < 100; i = i + 1) begin
-            #5;
-            // Alternating between logic (AND/OR/XOR), shifts, and arithmetic
+            // Controlled, alternating instruction sequence applied identically to both DUTs
             case (i % 5)
-                0: alu_ctrl = 4'b1001; // AND
-                1: alu_ctrl = 4'b1000; // OR
-                2: alu_ctrl = 4'b0101; // XOR
-                3: alu_ctrl = 4'b0000; // ADD
-                4: alu_ctrl = 4'b0010; // SLL
+                0: alu_ctrl = 4'b1001; // AND (Logic)
+                1: alu_ctrl = 4'b1000; // OR  (Logic)
+                2: alu_ctrl = 4'b0101; // XOR (Logic)
+                3: alu_ctrl = 4'b0000; // ADD (Arithmetic)
+                4: alu_ctrl = 4'b0010; // SLL (Shift)
             endcase
             a = a ^ (32'h0101_0101 * (i + 1));
             b = b + (32'h0202_0202 * (i + 1));
+            #10;
         end
+        #10;
 
         // --- 5. FINAL SUMMARY ---
         $display("==================================================================");

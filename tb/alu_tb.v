@@ -92,20 +92,34 @@ module alu_tb;
 
     task apply_and_check;
         input [255:0] test_name;
+        reg has_unknown;
         begin
             #5; // Wait for combinational propagation
             golden_reference(a, b, opcode, ref_out, ref_carry, ref_zero);
 
-            if (base_out === ref_out && opt_out === ref_out &&
+            // Reject unknown (X/Z) bits on all inputs and outputs
+            has_unknown = (^a === 1'bx) || (^b === 1'bx) || (^opcode === 1'bx) ||
+                          (^base_out === 1'bx) || (^opt_out === 1'bx) ||
+                          (base_carry === 1'bx) || (opt_carry === 1'bx) ||
+                          (base_zero === 1'bx) || (opt_zero === 1'bx);
+
+            if (!has_unknown &&
+                base_out === ref_out && opt_out === ref_out &&
                 base_carry === ref_carry && opt_carry === ref_carry &&
                 base_zero === ref_zero && opt_zero === ref_zero) begin
                 pass_count = pass_count + 1;
             end else begin
                 fail_count = fail_count + 1;
-                $display("[FAIL] %s | Op: %b, A: 0x%02h, B: 0x%02h", test_name, opcode, a, b);
-                $display("       Ref : Out=0x%02h, C=%b, Z=%b", ref_out, ref_carry, ref_zero);
-                $display("       Base: Out=0x%02h, C=%b, Z=%b", base_out, base_carry, base_zero);
-                $display("       Opt : Out=0x%02h, C=%b, Z=%b", opt_out, opt_carry, opt_zero);
+                if (has_unknown) begin
+                    $display("[FAIL - UNKNOWN VALUE X/Z] %s | Op: %b, A: 0x%02h, B: 0x%02h", test_name, opcode, a, b);
+                    $display("       Base: Out=0x%02h, C=%b, Z=%b", base_out, base_carry, base_zero);
+                    $display("       Opt : Out=0x%02h, C=%b, Z=%b", opt_out, opt_carry, opt_zero);
+                end else begin
+                    $display("[FAIL] %s | Op: %b, A: 0x%02h, B: 0x%02h", test_name, opcode, a, b);
+                    $display("       Ref : Out=0x%02h, C=%b, Z=%b", ref_out, ref_carry, ref_zero);
+                    $display("       Base: Out=0x%02h, C=%b, Z=%b", base_out, base_carry, base_zero);
+                    $display("       Opt : Out=0x%02h, C=%b, Z=%b", opt_out, opt_carry, opt_zero);
+                end
             end
         end
     endtask
@@ -150,7 +164,13 @@ module alu_tb;
         for (i = 0; i < 3000; i = i + 1) begin
             a = $random;
             b = $random;
-            opcode = $random % 8;
+            // 2,500 tests (83%) test the 5 valid opcodes (0..4) uniformly (500 each)
+            // 500 tests (17%) test invalid opcodes (5..7)
+            if (i < 2500) begin
+                opcode = (i % 5);
+            end else begin
+                opcode = 3'd5 + ((i - 2500) % 3);
+            end
             apply_and_check("Random Vector");
         end
 
