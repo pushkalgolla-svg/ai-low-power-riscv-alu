@@ -1,27 +1,29 @@
 ================================================================================
              8-BIT ALU: HARDWARE SYNTHESIS & GATE BENCHMARK REPORT             
 ================================================================================
-Design Metric                    | Baseline     | AI-Optimized | Delta     
+Design Metric                        | Baseline     | AI-Optimized | Delta     
 --------------------------------------------------------------------------------
-Total Synthesized Cells          | 231          | 224          | -3.0%     
-Total Interconnect Wires         | 145          | 117          | -19.3%    
-Total Wire Bits                  | 260          | 248          | -4.6%     
-Public Wires                     | 6            | 19           | +216.7%   
-Public Wire Bits                 | 29           | 106          | +265.5%   
+Total Synthesized Netlist Cells      | 231          | 224          | -3.0%     
+Netlist Interconnect Wires (Nets)    | 145          | 117          | -19.3%    
+Total Netlist Wire Bits              | 260          | 248          | -4.6%     
+Public Netlist Interface Wires       | 6            | 19           | +216.7%   
+Public Netlist Wire Bits             | 29           | 106          | +265.5%   
 --------------------------------------------------------------------------------
 Cell Gate Breakdown (Synthesized Technology Primitives):
-  - $_AND_                       | 88           | 66           | -25.0%    
-  - $_MUX_                       | 9            | 49           | +444.4%   
-  - $_NOT_                       | 19           | 18           | -5.3%     
-  - $_OR_                        | 85           | 67           | -21.2%    
-  - $_XOR_                       | 30           | 24           | -20.0%    
+  - $_AND_                           | 88           | 66           | -25.0%    
+  - $_MUX_                           | 9            | 49           | +444.4%   
+  - $_NOT_                           | 19           | 18           | -5.3%     
+  - $_OR_                            | 85           | 67           | -21.2%    
+  - $_XOR_                           | 30           | 24           | -20.0%    
 ================================================================================
 
 [ARCHITECTURAL ANALYSIS]
 1. Logic Cell Complexity: -3.0% cells
    - Unified two's-complement arithmetic replaces separate addition and subtraction logic.
-2. Routing Interconnect: -19.3% wires
-   - Reduced multiplexing stages and resource sharing minimize internal routing footprint.
+2. Netlist Interconnect: -19.3% netlist wires (nets)
+   - Reduced multiplexing stages and resource sharing minimize internal netlist interconnect footprint.
+   - Note: Netlist wires reflect logical signal connectivity (nets), distinguished from physical
+     post-layout metal routing wirelength or congestion.
 3. Operand Isolation:
    - Inputs to the 8-bit carry chain are gated to zero during logical operations,
      suppressing dynamic switching activity across inactive functional sub-blocks.

@@ -93,28 +93,30 @@ Switching activity is quantified by counting signal bit transitions from identic
 
 > **Engineering Disclaimer**: Switching-activity transition counts measure dynamic toggle suppression, not absolute power in milliwatts ($\text{mW}$). Real physical power ($P_{\text{total}} = P_{\text{dyn}} + P_{\text{leak}}$) requires a calibrated foundry standard-cell library (`.lib`) and post-route parasitic extraction (`SPEF`).
 
-### 2. Yosys Generic Gate Synthesis (`synth -noabc`)
-Synthesis performed with open-source Yosys using generic CMOS gate mapping:
+### 2. Generic Technology-Independent Netlist Complexity (Yosys `synth -noabc`)
+Synthesis performed with open-source Yosys using generic CMOS technology primitive gate mapping:
 
 #### 32-Bit RISC-V ALU:
 | Metric | RV32I Baseline | AI-Optimized | Delta |
 | :--- | :--- | :--- | :--- |
-| **Total Synthesized Cells** | 1,485 | 1,499 | **+0.9%** |
-| **Interconnect Routing Wires** | 602 | 491 | **-18.4%** |
-| **Total Wire Bits** | 1,735 | 1,712 | **-1.3%** |
+| **Total Synthesized Netlist Cells** | 1,485 | 1,499 | **+0.9%** |
+| **Netlist Interconnect Wires (Nets)** | 602 | 491 | **-18.4%** |
+| **Total Netlist Wire Bits** | 1,735 | 1,712 | **-1.3%** |
 | **`$_AND_` Gates** | 479 | 343 | **-28.4%** |
 | **`$_OR_` Gates** | 425 | 281 | **-33.9%** |
 | **`$_XOR_` Gates** | 128 | 97 | **-24.2%** |
 | **`$_MUX_` Gates** | 404 | 730 | **+80.7%** |
 
-*Analysis*: Operand isolation introduces input gating multiplexers (+80.7% muxes, +0.9% overall cells), trading a negligible gate count delta for a massive **>50% reduction in dynamic toggles** in the 32-bit execution units, while reducing interconnect wiring by **-18.4%**.
+*Analysis*: Operand isolation introduces input gating multiplexers (+80.7% muxes, +0.9% overall cells), trading a negligible gate count delta for a massive **>50% reduction in dynamic toggles** in the 32-bit execution units, while reducing generic netlist interconnect wires by **-18.4%**.
+
+> **Netlist Wires vs. Physical Routing**: Netlist wire counts reflect logical signal interconnects (nets) in the synthesized netlist prior to physical layout. They are distinct from physical post-layout metal routing wirelength ($\mu m$) or routing track congestion, which require place-and-route (P&R).
 
 #### 8-Bit ALU:
 | Metric | Baseline | AI-Optimized | Delta |
 | :--- | :--- | :--- | :--- |
-| **Total Synthesized Cells** | 231 | 224 | **-3.0%** |
-| **Interconnect Routing Wires** | 145 | 117 | **-19.3%** |
-| **Total Wire Bits** | 260 | 248 | **-4.6%** |
+| **Total Synthesized Netlist Cells** | 231 | 224 | **-3.0%** |
+| **Netlist Interconnect Wires (Nets)** | 145 | 117 | **-19.3%** |
+| **Total Netlist Wire Bits** | 260 | 248 | **-4.6%** |
 
 ---
 
@@ -125,7 +127,8 @@ The repository includes a GitHub Actions CI workflow (`.github/workflows/ci.yml`
 - Installs Icarus Verilog and Yosys on `ubuntu-latest`.
 - Compiles and runs both the 8-bit and 32-bit dual-DUT testbenches in strict verification mode.
 - Executes the offline orchestrator scripts and verifies all report artifacts.
-- Operates **100% offline** without needing any API keys.
+- **Fail-Safe Statistics Assertion**: Fails the build immediately if synthesis cell counts or netlist wire counts are missing, unparsed, or zero.
+- Operates **100% offline** using lightweight core dependencies without requiring any API keys.
 
 ---
 
@@ -142,9 +145,9 @@ To prevent generated AI models from silently overwriting validated RTL:
 ## Quickstart & Reproduction Guide
 
 ### Prerequisites
-- **Python 3.10+** (standard library sufficient for offline verification; `python-dotenv` for env config)
+- **Python 3.10+**
 - **Icarus Verilog (`iverilog` & `vvp`)**
-- **Yosys** (e.g. `yowasp-yosys` or native Yosys)
+- **Yosys** (e.g. `yowasp-yosys` or standard native Yosys)
 - **GTKWave** (optional, for waveform inspection)
 
 ### Installation
@@ -153,7 +156,12 @@ git clone https://github.com/pushkalgolla-svg/ai-low-power-riscv-alu.git
 cd ai-low-power-riscv-alu
 python -m venv .venv
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+
+# Install core offline verification dependencies (minimal)
 pip install -r requirements.txt
+
+# (Optional) Install AI generation dependencies if using Gemini API
+pip install -r requirements-ai.txt
 ```
 
 ### Running the Pipelines
@@ -174,7 +182,7 @@ python scripts/optimize.py
 
 #### 3. (Optional) Generate a New AI Optimization Candidate
 ```bash
-# Requires GEMINI_API_KEY set in .env
+# Requires GEMINI_API_KEY set in .env and requirements-ai.txt installed
 python scripts/optimize_riscv.py --generate
 
 # Promote verified candidate to production RTL
@@ -197,7 +205,8 @@ Compare `dut_base` vs `dut_opt` execution unit activity side-by-side in real tim
 │       └── ci.yml            # Automated GitHub Actions verification & synthesis CI
 ├── .env.example              # Template for API keys (optional)
 ├── README.md                 # Project architecture, benchmarks & documentation
-├── requirements.txt          # Python dependencies
+├── requirements.txt          # Core offline dependencies (python-dotenv)
+├── requirements-ai.txt       # Optional AI candidate generation dependencies
 ├── run_demo.bat              # One-click Windows runner
 ├── reports/
 │   ├── comparison_report.txt # 8-bit ALU synthesis report
@@ -223,7 +232,7 @@ Compare `dut_base` vs `dut_opt` execution unit activity side-by-side in real tim
 
 - **Low-Power ASIC Architecture & Design for RISC-V (RV32I) Core**:
   - Architected an automated low-power PPA optimization and verification pipeline in Verilog (IEEE 1364-2001) for a 32-bit RISC-V ALU across all 10 standard integer computational instructions.
-  - Implemented multi-datapath Operand Isolation and unified two's-complement arithmetic resource sharing, achieving **-53.4%** reduction in 32-bit adder input transitions, **-52.3%** reduction in barrel shifter transitions, and **-18.4%** reduction in interconnect routing wires.
+  - Implemented multi-datapath Operand Isolation and unified two's-complement arithmetic resource sharing, achieving **-53.4%** reduction in 32-bit adder input transitions, **-52.3%** reduction in barrel shifter transitions, and **-18.4%** reduction in generic netlist interconnect wires (nets).
   - Developed dual-DUT lockstep co-simulation testbenches with 6,056 vectors (directed corners, shift wrapping, signed overflow, and 5,000 pseudo-random stress vectors with unknown bit rejection) verified against an independent golden behavioral reference model with zero functional regressions.
   - Profiled dynamic switching activity from dedicated VCD simulation waveforms under identical workloads and synthesized generic CMOS gate-level netlists with Yosys.
-  - Built GitHub Actions CI pipeline executing automated RTL simulation and synthesis across every commit.
+  - Built GitHub Actions CI pipeline executing automated RTL simulation, synthesis, and zero-defect netlist assertions across every commit without external API dependencies.

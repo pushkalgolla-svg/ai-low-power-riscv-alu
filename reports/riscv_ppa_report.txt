@@ -1,27 +1,27 @@
 ========================================================================================
           32-BIT RISC-V (RV32I) ALU: PPA & SWITCHING ACTIVITY BENCHMARK REPORT          
 ========================================================================================
-Design Metric                            | RV32I Baseline  | AI-Optimized    | Delta     
+Design Metric                              | RV32I Baseline  | AI-Optimized    | Delta     
 ----------------------------------------------------------------------------------------
 1. Dynamic Switching Activity Estimates (Signal Bit Transitions under Identical Stimulus):
-  - Primary ALU Input Transitions        | 3050            | 3050            | 0.0%      
-  - 32-bit Adder Input Transitions       | 2851            | 1328            | -53.4%    
-  - Barrel Shifter Input Transitions     | 1494            | 713             | -52.3%    
-  - Logic Datapath Input Transitions     | 2851            | 2352            | -17.5%    
-  - ALU Output Bit Transitions           | 1555            | 1555            | 0.0%      
+  - Primary ALU Input Transitions          | 3050            | 3050            | 0.0%      
+  - 32-bit Adder Input Transitions         | 2851            | 1328            | -53.4%    
+  - Barrel Shifter Input Transitions       | 1494            | 713             | -52.3%    
+  - Logic Datapath Input Transitions       | 2851            | 2352            | -17.5%    
+  - ALU Output Bit Transitions             | 1555            | 1555            | 0.0%      
 ----------------------------------------------------------------------------------------
-2. Generic Technology-Independent Synthesis Gate Complexity (Yosys synth -noabc):
-  - Total Synthesized Cells              | 1485            | 1499            | +0.9%     
-  - Interconnect Routing Wires           | 602             | 491             | -18.4%    
-  - Total Wire Bits                      | 1735            | 1712            | -1.3%     
-  - Public Interface Wires               | 6               | 21              | +250.0%   
+2. Generic Technology-Independent Netlist Complexity (Yosys synth -noabc):
+  - Total Synthesized Netlist Cells        | 1485            | 1499            | +0.9%     
+  - Netlist Interconnect Wires (Nets)      | 602             | 491             | -18.4%    
+  - Total Netlist Wire Bits                | 1735            | 1712            | -1.3%     
+  - Public Netlist Interface Wires         | 6               | 21              | +250.0%   
 ----------------------------------------------------------------------------------------
 3. Technology Primitive Gate Breakdown:
-  - $_AND_                               | 479             | 343             | -28.4%    
-  - $_MUX_                               | 404             | 730             | +80.7%    
-  - $_NOT_                               | 49              | 48              | -2.0%     
-  - $_OR_                                | 425             | 281             | -33.9%    
-  - $_XOR_                               | 128             | 97              | -24.2%    
+  - $_AND_                                 | 479             | 343             | -28.4%    
+  - $_MUX_                                 | 404             | 730             | +80.7%    
+  - $_NOT_                                 | 49              | 48              | -2.0%     
+  - $_OR_                                  | 425             | 281             | -33.9%    
+  - $_XOR_                                 | 128             | 97              | -24.2%    
 ========================================================================================
 
 [ENGINEERING ANALYSIS & ARCHITECTURAL VERDICT]
@@ -31,13 +31,15 @@ Design Metric                            | RV32I Baseline  | AI-Optimized    | D
    - Mechanism: Operand isolation (input gating) forces arithmetic, shifter, and logic inputs
      to zero when their respective execution blocks are inactive, preventing parasitic toggles
      through high-capacitance carry chains and shift matrices.
-2. Interconnect & Area Trade-Off:
-   - Achieved -18.4% reduction in internal routing wires.
+2. Netlist Interconnect & Area Trade-Off:
+   - Achieved -18.4% reduction in generic netlist interconnect wires (nets).
    - Cell count changed by +0.9%: Operand isolation adds lightweight gating multiplexers
      on sub-block inputs, trading a nominal gate overhead for massive dynamic power savings.
 3. Honest Physical Characterization Disclaimer:
-   - The transition counts reported above represent simulated dynamic switching activity,
+   - The transition counts reported above represent simulated dynamic switching-activity reductions,
      not milliwatts (mW) of physical power.
+   - Netlist wires reflect logical signal nets in the synthesized generic netlist, not physical metal
+     routing tracks or wirelength.
    - Absolute physical power (static leakage + dynamic internal/switching) and silicon area (um^2)
      require target standard cell library models (.lib) and post-route parasitic extraction (SPEF/DSPF).
 ========================================================================================

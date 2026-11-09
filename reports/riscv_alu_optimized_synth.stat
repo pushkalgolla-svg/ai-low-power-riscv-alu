@@ -552,5 +552,5 @@ Found and reported 0 problems.
 
 End of script. Logfile hash: e16d6f47a7, time: 0.38s, user: 0.38s, system: 0.00s
 Yosys 0.70 (git sha1 28ba3cb92, Release, Clang /workspace/YoWASP/yosys/wasi-sdk-33.0-x86_64-linux/share/cmake/../..//bin/clang++ 22.1.0)
-Time spent: 24% 1x techmap (0 sec), 18% 22x opt_expr (0 sec), ...
+Time spent: 23% 1x techmap (0 sec), 18% 22x opt_expr (0 sec), ...
 

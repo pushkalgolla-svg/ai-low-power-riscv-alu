@@ -1,0 +1,3 @@
+# Optional dependencies for Gemini AI candidate generation
+-r requirements.txt
+google-generativeai>=0.8.0

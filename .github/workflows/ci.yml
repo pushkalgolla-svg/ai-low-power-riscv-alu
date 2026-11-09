@@ -28,7 +28,7 @@ jobs:
           sudo apt-get install -y iverilog yosys
           mkdir -p reports
 
-      - name: Install Python Dependencies
+      - name: Install Core Offline Python Dependencies
         run: |
           pip install --upgrade pip
           pip install -r requirements.txt
@@ -55,10 +55,40 @@ jobs:
           echo "=== Executing scripts/optimize_riscv.py ==="
           python scripts/optimize_riscv.py
 
-      - name: Verify Generated Reports & Artifacts
+      - name: Verify Generated Reports & Non-Zero Synthesis Statistics
         run: |
-          echo "=== Verifying Artifact Generation ==="
+          echo "=== Verifying Artifact Generation & Valid Non-Zero Statistics ==="
           test -f reports/comparison_report.txt
           test -f reports/riscv_ppa_report.txt
           test -f reports/riscv_activity.vcd
-          echo "All reports and VCD traces successfully generated and validated!"
+          python -c "
+          import sys
+          reports = ['reports/comparison_report.txt', 'reports/riscv_ppa_report.txt']
+          for r in reports:
+              with open(r, 'r', encoding='utf-8') as f:
+                  content = f.read()
+              lines = content.splitlines()
+              found_cells = False
+              found_wires = False
+              for line in lines:
+                  if 'Total Synthesized Netlist Cells' in line:
+                      parts = [p.strip() for p in line.split('|')]
+                      if len(parts) >= 3:
+                          base_cells = int(parts[1])
+                          opt_cells = int(parts[2])
+                          assert base_cells > 0, f'Zero baseline cells in {r}'
+                          assert opt_cells > 0, f'Zero opt cells in {r}'
+                          found_cells = True
+                  if 'Netlist Interconnect Wires' in line:
+                      parts = [p.strip() for p in line.split('|')]
+                      if len(parts) >= 3:
+                          base_wires = int(parts[1])
+                          opt_wires = int(parts[2])
+                          assert base_wires > 0, f'Zero baseline wires in {r}'
+                          assert opt_wires > 0, f'Zero opt wires in {r}'
+                          found_wires = True
+              if not found_cells or not found_wires:
+                  print(f'[FATAL] Failed to find valid non-zero statistics in {r} (cells={found_cells}, wires={found_wires})')
+                  sys.exit(1)
+          print('Report integrity verified: Non-zero synthesis cells and wires confirmed across all reports!')
+          "

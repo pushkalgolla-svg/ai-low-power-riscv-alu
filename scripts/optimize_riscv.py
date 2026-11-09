@@ -6,7 +6,7 @@ Features:
 2. Fair Dynamic Switching Activity Profiling: Measures bit transitions from identical VCD traces.
 3. Technology-Independent Synthesis: Generic CMOS gate mapping via Yosys with zero arbitrary multipliers.
 4. Candidate Safety: AI generation writes strictly to candidate files without overwriting validated RTL.
-5. Fully Offline Capable: Standard verification and synthesis require no API keys or internet connection.
+5. Fully Offline Capable: Standard verification and synthesis require no API keys or AI dependencies.
 """
 
 import os
@@ -208,10 +208,21 @@ def run_yosys_synthesis(verilog_file: Path, top_module: str) -> dict:
         print(f"[ERROR] Yosys synthesis failed for {top_module}:\n{raw_output}")
         sys.exit(1)
 
-    return parse_yosys_stats(raw_output, top_module)
+    try:
+        stats = parse_yosys_stats(raw_output, top_module)
+    except Exception as e:
+        print(f"[ERROR] Failed parsing synthesis statistics for {top_module}: {e}")
+        sys.exit(1)
+
+    return stats
 
 
 def parse_yosys_stats(output: str, module_name: str) -> dict:
+    """
+    Parses Yosys stat output across multiple formats:
+    - Standard Ubuntu/Debian packages (Yosys 0.9 - 0.38+): 'Number of cells: 1485', '   $_AND_   479'
+    - Modern columnar YoWASP releases: '1485 cells', '   479   $_AND_'
+    """
     stats = {
         "module": module_name,
         "wires": 0,
@@ -225,29 +236,54 @@ def parse_yosys_stats(output: str, module_name: str) -> dict:
     stat_match = re.search(r"=== " + re.escape(module_name) + r" ===(.*?)(?:===|\Z)", output, re.DOTALL)
     block = stat_match.group(1) if stat_match else output
 
-    m_wires = re.search(r"^\s*(\d+)\s+wires\b", block, re.MULTILINE)
+    # 1. Total netlist wires (nets)
+    m_wires = re.search(r"Number of wires:\s*(\d+)", block) or re.search(r"^\s*(\d+)\s+wires\b", block, re.MULTILINE)
     if m_wires:
         stats["wires"] = int(m_wires.group(1))
 
-    m_wbits = re.search(r"^\s*(\d+)\s+wire bits\b", block, re.MULTILINE)
+    # 2. Total netlist wire bits
+    m_wbits = re.search(r"Number of wire bits:\s*(\d+)", block) or re.search(r"^\s*(\d+)\s+wire bits\b", block, re.MULTILINE)
     if m_wbits:
         stats["wire_bits"] = int(m_wbits.group(1))
 
-    m_pub_w = re.search(r"^\s*(\d+)\s+public wires\b", block, re.MULTILINE)
+    # 3. Public interface wires
+    m_pub_w = re.search(r"Number of public wires:\s*(\d+)", block) or re.search(r"^\s*(\d+)\s+public wires\b", block, re.MULTILINE)
     if m_pub_w:
         stats["public_wires"] = int(m_pub_w.group(1))
 
-    m_pub_wb = re.search(r"^\s*(\d+)\s+public wire bits\b", block, re.MULTILINE)
+    # 4. Public interface wire bits
+    m_pub_wb = re.search(r"Number of public wire bits:\s*(\d+)", block) or re.search(r"^\s*(\d+)\s+public wire bits\b", block, re.MULTILINE)
     if m_pub_wb:
         stats["public_wire_bits"] = int(m_pub_wb.group(1))
 
-    m_cells = re.search(r"^\s*(\d+)\s+cells\b", block, re.MULTILINE)
+    # 5. Total synthesized cells
+    m_cells = re.search(r"Number of cells:\s*(\d+)", block) or re.search(r"^\s*(\d+)\s+cells\b", block, re.MULTILINE)
     if m_cells:
         stats["cells"] = int(m_cells.group(1))
 
-    cell_lines = re.findall(r"^\s+(\d+)\s+(\$_\w+_?|\$\w+)\s*$", block, re.MULTILINE)
-    for count, name in cell_lines:
-        stats["cell_details"][name] = int(count)
+    # 6. Primitive gate breakdown
+    # Format A (Ubuntu default): Name first, count second (e.g. "     $_AND_                        479")
+    cells_a = re.findall(r"^\s+(\$_\w+_?|\$\w+)\s+(\d+)\s*$", block, re.MULTILINE)
+    if cells_a:
+        for name, count in cells_a:
+            stats["cell_details"][name] = int(count)
+    else:
+        # Format B (YoWASP/Modern): Count first, name second (e.g. "      479   $_AND_")
+        cells_b = re.findall(r"^\s+(\d+)\s+(\$_\w+_?|\$\w+)\s*$", block, re.MULTILINE)
+        for count, name in cells_b:
+            stats["cell_details"][name] = int(count)
+
+    # Sanity fallback: if cell details found but cells header was missing, sum details
+    if stats["cells"] == 0 and stats["cell_details"]:
+        stats["cells"] = sum(stats["cell_details"].values())
+
+    # Validation: Fail if synthesis statistics are missing or zero
+    if stats["cells"] <= 0 or stats["wires"] <= 0:
+        raise ValueError(
+            f"Synthesis statistics validation failed for module '{module_name}': "
+            f"extracted cells={stats['cells']}, wires={stats['wires']}. "
+            f"Expected positive integers. Block snippet:\n{block[:400]}"
+        )
 
     return stats
 
@@ -267,20 +303,20 @@ def generate_ppa_report(b_stats: dict, o_stats: dict, activity: dict) -> str:
         "========================================================================================",
         "          32-BIT RISC-V (RV32I) ALU: PPA & SWITCHING ACTIVITY BENCHMARK REPORT          ",
         "========================================================================================",
-        f"{'Design Metric':<40} | {'RV32I Baseline':<15} | {'AI-Optimized':<15} | {'Delta':<10}",
+        f"{'Design Metric':<42} | {'RV32I Baseline':<15} | {'AI-Optimized':<15} | {'Delta':<10}",
         "----------------------------------------------------------------------------------------",
         "1. Dynamic Switching Activity Estimates (Signal Bit Transitions under Identical Stimulus):",
-        f"  - Primary ALU Input Transitions        | {b_act.get('primary_inputs', 0):<15} | {o_act.get('primary_inputs', 0):<15} | {delta(b_act.get('primary_inputs', 0), o_act.get('primary_inputs', 0)):<10}",
-        f"  - 32-bit Adder Input Transitions       | {b_act.get('adder_inputs', 0):<15} | {o_act.get('adder_inputs', 0):<15} | {delta(b_act.get('adder_inputs', 0), o_act.get('adder_inputs', 0)):<10}",
-        f"  - Barrel Shifter Input Transitions     | {b_act.get('shifter_inputs', 0):<15} | {o_act.get('shifter_inputs', 0):<15} | {delta(b_act.get('shifter_inputs', 0), o_act.get('shifter_inputs', 0)):<10}",
-        f"  - Logic Datapath Input Transitions     | {b_act.get('logic_inputs', 0):<15} | {o_act.get('logic_inputs', 0):<15} | {delta(b_act.get('logic_inputs', 0), o_act.get('logic_inputs', 0)):<10}",
-        f"  - ALU Output Bit Transitions           | {b_act.get('outputs', 0):<15} | {o_act.get('outputs', 0):<15} | {delta(b_act.get('outputs', 0), o_act.get('outputs', 0)):<10}",
+        f"  - Primary ALU Input Transitions          | {b_act.get('primary_inputs', 0):<15} | {o_act.get('primary_inputs', 0):<15} | {delta(b_act.get('primary_inputs', 0), o_act.get('primary_inputs', 0)):<10}",
+        f"  - 32-bit Adder Input Transitions         | {b_act.get('adder_inputs', 0):<15} | {o_act.get('adder_inputs', 0):<15} | {delta(b_act.get('adder_inputs', 0), o_act.get('adder_inputs', 0)):<10}",
+        f"  - Barrel Shifter Input Transitions       | {b_act.get('shifter_inputs', 0):<15} | {o_act.get('shifter_inputs', 0):<15} | {delta(b_act.get('shifter_inputs', 0), o_act.get('shifter_inputs', 0)):<10}",
+        f"  - Logic Datapath Input Transitions       | {b_act.get('logic_inputs', 0):<15} | {o_act.get('logic_inputs', 0):<15} | {delta(b_act.get('logic_inputs', 0), o_act.get('logic_inputs', 0)):<10}",
+        f"  - ALU Output Bit Transitions             | {b_act.get('outputs', 0):<15} | {o_act.get('outputs', 0):<15} | {delta(b_act.get('outputs', 0), o_act.get('outputs', 0)):<10}",
         "----------------------------------------------------------------------------------------",
-        "2. Generic Technology-Independent Synthesis Gate Complexity (Yosys synth -noabc):",
-        f"  - Total Synthesized Cells              | {b_stats.get('cells', 0):<15} | {o_stats.get('cells', 0):<15} | {delta(b_stats.get('cells', 0), o_stats.get('cells', 0)):<10}",
-        f"  - Interconnect Routing Wires           | {b_stats.get('wires', 0):<15} | {o_stats.get('wires', 0):<15} | {delta(b_stats.get('wires', 0), o_stats.get('wires', 0)):<10}",
-        f"  - Total Wire Bits                      | {b_stats.get('wire_bits', 0):<15} | {o_stats.get('wire_bits', 0):<15} | {delta(b_stats.get('wire_bits', 0), o_stats.get('wire_bits', 0)):<10}",
-        f"  - Public Interface Wires               | {b_stats.get('public_wires', 0):<15} | {o_stats.get('public_wires', 0):<15} | {delta(b_stats.get('public_wires', 0), o_stats.get('public_wires', 0)):<10}",
+        "2. Generic Technology-Independent Netlist Complexity (Yosys synth -noabc):",
+        f"  - Total Synthesized Netlist Cells        | {b_stats.get('cells', 0):<15} | {o_stats.get('cells', 0):<15} | {delta(b_stats.get('cells', 0), o_stats.get('cells', 0)):<10}",
+        f"  - Netlist Interconnect Wires (Nets)      | {b_stats.get('wires', 0):<15} | {o_stats.get('wires', 0):<15} | {delta(b_stats.get('wires', 0), o_stats.get('wires', 0)):<10}",
+        f"  - Total Netlist Wire Bits                | {b_stats.get('wire_bits', 0):<15} | {o_stats.get('wire_bits', 0):<15} | {delta(b_stats.get('wire_bits', 0), o_stats.get('wire_bits', 0)):<10}",
+        f"  - Public Netlist Interface Wires         | {b_stats.get('public_wires', 0):<15} | {o_stats.get('public_wires', 0):<15} | {delta(b_stats.get('public_wires', 0), o_stats.get('public_wires', 0)):<10}",
         "----------------------------------------------------------------------------------------",
         "3. Technology Primitive Gate Breakdown:"
     ]
@@ -289,7 +325,7 @@ def generate_ppa_report(b_stats: dict, o_stats: dict, activity: dict) -> str:
     for ct in all_cells:
         b_c = b_stats.get("cell_details", {}).get(ct, 0)
         o_c = o_stats.get("cell_details", {}).get(ct, 0)
-        lines.append(f"  - {ct:<36} | {b_c:<15} | {o_c:<15} | {delta(b_c, o_c):<10}")
+        lines.append(f"  - {ct:<38} | {b_c:<15} | {o_c:<15} | {delta(b_c, o_c):<10}")
 
     adder_d = delta(b_act.get('adder_inputs', 0), o_act.get('adder_inputs', 0))
     shifter_d = delta(b_act.get('shifter_inputs', 0), o_act.get('shifter_inputs', 0))
@@ -304,13 +340,15 @@ def generate_ppa_report(b_stats: dict, o_stats: dict, activity: dict) -> str:
         f"   - Mechanism: Operand isolation (input gating) forces arithmetic, shifter, and logic inputs\n"
         f"     to zero when their respective execution blocks are inactive, preventing parasitic toggles\n"
         f"     through high-capacitance carry chains and shift matrices.\n"
-        f"2. Interconnect & Area Trade-Off:\n"
-        f"   - Achieved {wire_d} reduction in internal routing wires.\n"
+        f"2. Netlist Interconnect & Area Trade-Off:\n"
+        f"   - Achieved {wire_d} reduction in generic netlist interconnect wires (nets).\n"
         f"   - Cell count changed by {delta(b_stats.get('cells', 0), o_stats.get('cells', 0))}: Operand isolation adds lightweight gating multiplexers\n"
         f"     on sub-block inputs, trading a nominal gate overhead for massive dynamic power savings.\n"
         f"3. Honest Physical Characterization Disclaimer:\n"
-        f"   - The transition counts reported above represent simulated dynamic switching activity,\n"
+        f"   - The transition counts reported above represent simulated dynamic switching-activity reductions,\n"
         f"     not milliwatts (mW) of physical power.\n"
+        f"   - Netlist wires reflect logical signal nets in the synthesized generic netlist, not physical metal\n"
+        f"     routing tracks or wirelength.\n"
         f"   - Absolute physical power (static leakage + dynamic internal/switching) and silicon area (um^2)\n"
         f"     require target standard cell library models (.lib) and post-route parasitic extraction (SPEF/DSPF)."
     )
@@ -321,18 +359,25 @@ def generate_ppa_report(b_stats: dict, o_stats: dict, activity: dict) -> str:
 
 def generate_candidate(preferred_model: str = None) -> tuple:
     """Invokes Gemini API to generate an optimized RTL candidate."""
-    import dotenv
-    if ENV_FILE.exists():
-        dotenv.load_dotenv(ENV_FILE)
-    api_key = os.environ.get("GEMINI_API_KEY")
+    try:
+        import dotenv
+        if ENV_FILE.exists():
+            dotenv.load_dotenv(ENV_FILE)
+    except ImportError:
+        pass
 
+    api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
         print("[ERROR] GEMINI_API_KEY is not set in environment or .env file.")
         print("Please configure GEMINI_API_KEY in .env to use AI candidate generation.")
         sys.exit(1)
 
-    import google.generativeai as genai
-    from google.api_core import exceptions as google_exceptions
+    try:
+        import google.generativeai as genai
+    except ImportError:
+        print("[ERROR] Optional AI dependencies are not installed.")
+        print("To use Gemini AI candidate generation, install: pip install -r requirements-ai.txt")
+        sys.exit(1)
 
     genai.configure(api_key=api_key)
 
@@ -415,7 +460,6 @@ def main():
         if not pass_check:
             print(f"[ERROR] Candidate failed verification! Refusing to promote:\n{log}")
             sys.exit(1)
-        # Rename module name inside candidate to riscv_alu_optimized
         cand_code = read_file(cand_file)
         promoted_code = re.sub(r"\bmodule\s+riscv_alu_candidate\b", "module riscv_alu_optimized", cand_code)
         write_file(opt_file, promoted_code)
@@ -483,8 +527,17 @@ def main():
         print("\n--- STEP 3: Yosys Synthesis & Gate Complexity Analysis ---")
         base_stats = run_yosys_synthesis(base_file, "riscv_alu_baseline")
         opt_stats = run_yosys_synthesis(opt_file, "riscv_alu_optimized")
-        print(f"[Synthesis] Baseline cell count : {base_stats['cells']} cells, {base_stats['wires']} wires")
-        print(f"[Synthesis] Optimized cell count: {opt_stats['cells']} cells, {opt_stats['wires']} wires")
+
+        # Explicit validation: Fail immediately if stats are missing or zero
+        if base_stats.get("cells", 0) <= 0 or opt_stats.get("cells", 0) <= 0:
+            print("[FATAL] Synthesis cell count is missing or zero! Failing pipeline.")
+            sys.exit(1)
+        if base_stats.get("wires", 0) <= 0 or opt_stats.get("wires", 0) <= 0:
+            print("[FATAL] Synthesis netlist wire count is missing or zero! Failing pipeline.")
+            sys.exit(1)
+
+        print(f"[Synthesis] Baseline cell count : {base_stats['cells']} cells, {base_stats['wires']} netlist wires")
+        print(f"[Synthesis] Optimized cell count: {opt_stats['cells']} cells, {opt_stats['wires']} netlist wires")
     else:
         print("\n--- STEP 3: Synthesis skipped (--skip-synthesis specified) ---")
 
