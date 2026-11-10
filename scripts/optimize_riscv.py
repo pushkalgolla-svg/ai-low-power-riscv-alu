@@ -195,12 +195,50 @@ def profile_vcd_switching_activity(vcd_path: Path) -> dict:
     }
 
 
+def get_yosys_cmd_args(script: str) -> list:
+    """
+    Builds the synthesis command, preferring the pinned YowASP Yosys executable (0.70)
+    over system Yosys for reproducible, cross-platform synthesis results.
+    """
+    # 1. Check for yowasp-yosys binary in the same directory as active Python interpreter
+    py_bin_dir = Path(sys.executable).parent
+    for candidate in ("yowasp-yosys.exe", "yowasp-yosys"):
+        yowasp_bin = py_bin_dir / candidate
+        if yowasp_bin.exists():
+            return [str(yowasp_bin), "-p", script]
+
+    # 2. Check for yowasp-yosys anywhere on PATH
+    which_yowasp = shutil.which("yowasp-yosys")
+    if which_yowasp:
+        return [which_yowasp, "-p", script]
+
+    # 3. Direct module invocation via active Python interpreter
+    try:
+        import yowasp_yosys
+        return [
+            sys.executable,
+            "-c",
+            "import sys, yowasp_yosys; sys.exit(yowasp_yosys.run_yosys(sys.argv[1:]))",
+            "-p",
+            script,
+        ]
+    except ImportError:
+        pass
+
+    # 4. Fallback to system yosys binary if present
+    which_yosys = shutil.which("yosys")
+    if which_yosys:
+        return [which_yosys, "-p", script]
+
+    return ["yowasp-yosys", "-p", script]
+
+
 def run_yosys_synthesis(verilog_file: Path, top_module: str) -> dict:
     stat_file = REPORTS_DIR / f"{top_module}_synth.stat"
-    yosys_cmd = shutil.which("yosys") or shutil.which("yowasp-yosys") or "yosys"
-
     yosys_script = f"read_verilog {verilog_file.as_posix()}; synth -noabc -top {top_module}; stat"
-    proc = subprocess.run([yosys_cmd, "-p", yosys_script], capture_output=True, text=True, cwd=PROJECT_ROOT)
+    cmd = get_yosys_cmd_args(yosys_script)
+
+    proc = subprocess.run(cmd, capture_output=True, text=True, cwd=PROJECT_ROOT)
     raw_output = proc.stdout + "\n" + proc.stderr
     write_file(stat_file, raw_output)
 

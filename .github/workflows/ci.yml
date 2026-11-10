@@ -22,13 +22,13 @@ jobs:
           python-version: '3.11'
           cache: 'pip'
 
-      - name: Install System EDA Tools (Icarus Verilog & Yosys)
+      - name: Install System EDA Tools (Icarus Verilog)
         run: |
           sudo apt-get update
-          sudo apt-get install -y iverilog yosys
+          sudo apt-get install -y iverilog
           mkdir -p reports
 
-      - name: Install Core Offline Python Dependencies
+      - name: Install Pinned EDA & Offline Python Dependencies
         run: |
           pip install --upgrade pip
           pip install -r requirements.txt
@@ -70,6 +70,10 @@ jobs:
               lines = content.splitlines()
               found_cells = False
               found_wires = False
+              base_cells = 0
+              opt_cells = 0
+              base_wires = 0
+              opt_wires = 0
               for line in lines:
                   if 'Total Synthesized Netlist Cells' in line:
                       parts = [p.strip() for p in line.split('|')]
@@ -90,5 +94,13 @@ jobs:
               if not found_cells or not found_wires:
                   print(f'[FATAL] Failed to find valid non-zero statistics in {r} (cells={found_cells}, wires={found_wires})')
                   sys.exit(1)
+              if 'comparison_report.txt' in r:
+                  assert (base_cells, opt_cells) == (231, 224), f'Unexpected 8-bit cells in {r}: {(base_cells, opt_cells)}'
+                  assert (base_wires, opt_wires) == (145, 117), f'Unexpected 8-bit wires in {r}: {(base_wires, opt_wires)}'
+                  print(f'Verified 8-bit ALU counts: {base_cells}/{opt_cells} cells, {base_wires}/{opt_wires} wires')
+              elif 'riscv_ppa_report.txt' in r:
+                  assert (base_cells, opt_cells) == (1485, 1499), f'Unexpected 32-bit cells in {r}: {(base_cells, opt_cells)}'
+                  assert (base_wires, opt_wires) == (602, 491), f'Unexpected 32-bit wires in {r}: {(base_wires, opt_wires)}'
+                  print(f'Verified 32-bit RV32I ALU counts: {base_cells}/{opt_cells} cells, {base_wires}/{opt_wires} wires')
           print('Report integrity verified: Non-zero synthesis cells and wires confirmed across all reports!')
           "

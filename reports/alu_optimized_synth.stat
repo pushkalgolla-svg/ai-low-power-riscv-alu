@@ -518,7 +518,7 @@ Found and reported 0 problems.
        67   $_OR_
        24   $_XOR_
 
-End of script. Logfile hash: 9ffb47c952, time: 0.11s, user: 0.12s, system: 0.00s
+End of script. Logfile hash: 9ffb47c952, time: 0.11s, user: 0.11s, system: 0.00s
 Yosys 0.70 (git sha1 28ba3cb92, Release, Clang /workspace/YoWASP/yosys/wasi-sdk-33.0-x86_64-linux/share/cmake/../..//bin/clang++ 22.1.0)
-Time spent: 33% 3x read_verilog (0 sec), 13% 1x techmap (0 sec), ...
+Time spent: 33% 3x read_verilog (0 sec), 14% 16x opt_expr (0 sec), ...
 
