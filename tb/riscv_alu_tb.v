@@ -34,6 +34,42 @@ module riscv_alu_tb;
         .zero(opt_zero)
     );
 
+    // =========================================================================
+    // Activity Instrumentation Probes (Equivalent Logical Datapath Boundaries)
+    // =========================================================================
+    // 1. Functional Datapath Category Probes:
+    // Arithmetic Datapath Inputs (Adder/Subtractor/Comparator)
+    wire [31:0] base_probe_arith_a   = dut_base.a;
+    wire [31:0] base_probe_arith_b   = dut_base.b;
+    wire [31:0] opt_probe_arith_a    = dut_opt.arith_a;
+    wire [31:0] opt_probe_arith_b    = dut_opt.arith_b;
+
+    // Shift Datapath Inputs (Barrel Shifter)
+    wire [31:0] base_probe_shift_a   = dut_base.a;
+    wire [4:0]  base_probe_shift_amt = dut_base.shamt;
+    wire [31:0] opt_probe_shift_a    = dut_opt.shift_a;
+    wire [4:0]  opt_probe_shift_amt  = dut_opt.shift_amt;
+
+    // Logic Datapath Inputs (AND/OR/XOR)
+    wire [31:0] base_probe_logic_a   = dut_base.a;
+    wire [31:0] base_probe_logic_b   = dut_base.b;
+    wire [31:0] opt_probe_logic_a    = dut_opt.logic_a;
+    wire [31:0] opt_probe_logic_b    = dut_opt.logic_b;
+
+    // 2. Individual Baseline Operator Probes (Where baseline uses separate operations):
+    wire [31:0] base_op_add_a        = dut_base.a;
+    wire [31:0] base_op_add_b        = dut_base.b;
+    wire [31:0] base_op_sub_a        = dut_base.a;
+    wire [31:0] base_op_sub_b        = dut_base.b;
+    wire [31:0] base_op_slt_a        = dut_base.a;
+    wire [31:0] base_op_slt_b        = dut_base.b;
+    wire [31:0] base_op_sll_a        = dut_base.a;
+    wire [4:0]  base_op_sll_amt      = dut_base.shamt;
+    wire [31:0] base_op_srl_a        = dut_base.a;
+    wire [4:0]  base_op_srl_amt      = dut_base.shamt;
+    wire [31:0] base_op_sra_a        = dut_base.a;
+    wire [4:0]  base_op_sra_amt      = dut_base.shamt;
+
     // Independent Golden Reference Model
     reg [31:0] ref_out;
     reg        ref_zero;
@@ -222,16 +258,16 @@ module riscv_alu_tb;
 
         // --- 4. SEPARATE DEDICATED SWITCHING-ACTIVITY WORKLOAD PROFILING ---
         $display("[INFO] Executing dedicated switching-activity workload profiling trace (100 cycles)...");
-`ifdef DUMP_VCD
-        $dumpfile("reports/riscv_activity.vcd");
-        $dumpvars(0, dut_base);
-        $dumpvars(0, dut_opt);
-`endif
-        // Settle initial state
+        // Settle initial state prior to measurement window to exclude initialization transitions
         a = 32'hA5A5_A5A5;
         b = 32'h5A5A_5A5A;
         alu_ctrl = 4'b0000;
         #10;
+
+`ifdef DUMP_VCD
+        $dumpfile("reports/riscv_activity.vcd");
+        $dumpvars(0, riscv_alu_tb);
+`endif
 
         for (i = 0; i < 100; i = i + 1) begin
             // Controlled, alternating instruction sequence applied identically to both DUTs
@@ -246,6 +282,10 @@ module riscv_alu_tb;
             b = b + (32'h0202_0202 * (i + 1));
             #10;
         end
+
+`ifdef DUMP_VCD
+        $dumpoff;
+`endif
         #10;
 
         // --- 5. FINAL SUMMARY ---

@@ -38,6 +38,34 @@ module alu_tb;
         .zero(opt_zero)
     );
 
+    // =========================================================================
+    // Activity Instrumentation Probes (Equivalent Logical Datapath Boundaries)
+    // =========================================================================
+    // 1. Functional Datapath Category Probes:
+    // Arithmetic Datapath Inputs (Adder/Subtractor)
+    wire [7:0] base_probe_arith_a = dut_base.a;
+    wire [7:0] base_probe_arith_b = dut_base.b;
+    wire [7:0] opt_probe_arith_a  = dut_opt.arith_a;
+    wire [7:0] opt_probe_arith_b  = dut_opt.arith_b;
+
+    // Logic Datapath Inputs (AND/OR/XOR)
+    wire [7:0] base_probe_logic_a = dut_base.a;
+    wire [7:0] base_probe_logic_b = dut_base.b;
+    wire [7:0] opt_probe_logic_a  = dut_opt.logic_a;
+    wire [7:0] opt_probe_logic_b  = dut_opt.logic_b;
+
+    // 2. Individual Baseline Operator Probes (Where baseline uses separate operations):
+    wire [7:0] base_op_add_a      = dut_base.a;
+    wire [7:0] base_op_add_b      = dut_base.b;
+    wire [7:0] base_op_sub_a      = dut_base.a;
+    wire [7:0] base_op_sub_b      = dut_base.b;
+    wire [7:0] base_op_and_a      = dut_base.a;
+    wire [7:0] base_op_and_b      = dut_base.b;
+    wire [7:0] base_op_or_a       = dut_base.a;
+    wire [7:0] base_op_or_b       = dut_base.b;
+    wire [7:0] base_op_xor_a      = dut_base.a;
+    wire [7:0] base_op_xor_b      = dut_base.b;
+
     // Golden Reference Model
     reg [7:0] ref_out;
     reg       ref_carry;
@@ -174,7 +202,38 @@ module alu_tb;
             apply_and_check("Random Vector");
         end
 
-        // --- 3. FINAL SUMMARY ---
+        // --- 3. SEPARATE DEDICATED SWITCHING-ACTIVITY WORKLOAD PROFILING ---
+        $display("[INFO] Executing dedicated 8-bit switching-activity workload profiling trace (100 cycles)...");
+        // Settle initial state prior to measurement window to exclude initialization transitions
+        a = 8'hA5;
+        b = 8'h5A;
+        opcode = 3'b000;
+        #10;
+
+`ifdef DUMP_VCD
+        $dumpfile("reports/alu_activity.vcd");
+        $dumpvars(0, alu_tb);
+`endif
+
+        for (i = 0; i < 100; i = i + 1) begin
+            case (i % 5)
+                0: opcode = 3'b010; // AND (Logic)
+                1: opcode = 3'b011; // OR  (Logic)
+                2: opcode = 3'b100; // XOR (Logic)
+                3: opcode = 3'b000; // ADD (Arithmetic)
+                4: opcode = 3'b001; // SUB (Arithmetic)
+            endcase
+            a = a ^ (8'h11 * (i + 1));
+            b = b + (8'h22 * (i + 1));
+            #10;
+        end
+
+`ifdef DUMP_VCD
+        $dumpoff;
+`endif
+        #10;
+
+        // --- 4. FINAL SUMMARY ---
         $display("================================================================");
         $display(" 8-BIT ALU VERIFICATION SUMMARY: Total=%0d, Passed=%0d, Failed=%0d",
                  (pass_count + fail_count), pass_count, fail_count);

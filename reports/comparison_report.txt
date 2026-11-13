@@ -1,33 +1,66 @@
-================================================================================
-             8-BIT ALU: HARDWARE SYNTHESIS & GATE BENCHMARK REPORT             
-================================================================================
-Design Metric                        | Baseline     | AI-Optimized | Delta     
---------------------------------------------------------------------------------
-Total Synthesized Netlist Cells      | 231          | 224          | -3.0%     
-Netlist Interconnect Wires (Nets)    | 145          | 117          | -19.3%    
-Total Netlist Wire Bits              | 260          | 248          | -4.6%     
-Public Netlist Interface Wires       | 6            | 19           | +216.7%   
-Public Netlist Wire Bits             | 29           | 106          | +265.5%   
---------------------------------------------------------------------------------
-Cell Gate Breakdown (Synthesized Technology Primitives):
-  - $_AND_                           | 88           | 66           | -25.0%    
-  - $_MUX_                           | 9            | 49           | +444.4%   
-  - $_NOT_                           | 19           | 18           | -5.3%     
-  - $_OR_                            | 85           | 67           | -21.2%    
-  - $_XOR_                           | 30           | 24           | -20.0%    
-================================================================================
+==========================================================================================================
+                      8-BIT ALU: PPA & SWITCHING ACTIVITY BENCHMARK REPORT                                
+==========================================================================================================
+Datapath / Signal Boundary           | Baseline   | Optimized  | Abs Delta   | Pct Delta  | Cycles
+----------------------------------------------------------------------------------------------------------
+1. RTL Dynamic Switching-Activity Estimates (Signal Bit Transitions under Identical Stimulus):
+  - Primary ALU Inputs (A, B, Opcode)| 945        | 945        | 0           | 0.0%       | 100   
+  - Arithmetic Datapath Inputs       | 787        | 460        | -327        | -41.6%     | 100   
+  - Logic Datapath Inputs (AND/OR/XOR)| 787        | 605        | -182        | -23.1%     | 100   
+  - ALU Outputs (alu_out, carry, zero)| 462        | 462        | 0           | 0.0%       | 100   
+  [Operator-Level Boundary (Baseline Separate Operators vs Optimized Shared Adder)]:
+  - Arithmetic Operators (ADD + SUB) | 1574       | 460        | -1114       | -70.8%     | 100   
+----------------------------------------------------------------------------------------------------------
+2. Visual Comparison of Dynamic Switching-Activity (Toggles per 100 Cycles):
+  Primary ALU Inputs   : Base [███████████████          ] 945
+                         Opt  [███████████████          ] 945 (0.0%)
+  Arithmetic Datapath  : Base [████████████             ] 787
+                         Opt  [███████                  ] 460 (-41.6%)
+  Logic Datapath       : Base [████████████             ] 787
+                         Opt  [██████████               ] 605 (-23.1%)
+----------------------------------------------------------------------------------------------------------
+3. Generic Technology-Independent Netlist Complexity (Yosys synth -noabc):
+Netlist Metric                       | Baseline   | AI-Optimized | Delta       | Classification    
+----------------------------------------------------------------------------------------------------------
+  - Total Synthesized Cells          | 231        | 224        | -3.0%       | Gate Complexity
+  - Combinational Cells              | 231        | 224        | -3.0%       | Logic Gates
+  - Sequential Cells (Registers)     | 0          | 0          | 0.0%        | Pure Combinational
+  - Netlist Interconnect Wires (Nets)| 145        | 117        | -19.3%      | Netlist Routing Footprint
+  - Total Netlist Wire Bits          | 260        | 248        | -4.6%       | Bit Width Footprint
+  - Public Netlist Interface Wires   | 6          | 19         | +216.7%     | Top Ports / Interconnect
+  - Public Netlist Wire Bits         | 29         | 106        | +265.5%     | Public Bits
+----------------------------------------------------------------------------------------------------------
+4. Technology Primitive Gate Breakdown:
+  - $_AND_                             | 88         | 66         | -25.0%      | Primitive
+  - $_MUX_                             | 9          | 49         | +444.4%     | Primitive
+  - $_NOT_                             | 19         | 18         | -5.3%       | Primitive
+  - $_OR_                              | 85         | 67         | -21.2%      | Primitive
+  - $_XOR_                             | 30         | 24         | -20.0%      | Primitive
+==========================================================================================================
 
-[ARCHITECTURAL ANALYSIS]
-1. Logic Cell Complexity: -3.0% cells
-   - Unified two's-complement arithmetic replaces separate addition and subtraction logic.
-2. Netlist Interconnect: -19.3% netlist wires (nets)
-   - Reduced multiplexing stages and resource sharing minimize internal netlist interconnect footprint.
-   - Note: Netlist wires reflect logical signal connectivity (nets), distinguished from physical
-     post-layout metal routing wirelength or congestion.
-3. Operand Isolation:
-   - Inputs to the 8-bit carry chain are gated to zero during logical operations,
+[ENGINEERING ANALYSIS & ARCHITECTURAL VERDICT]
+1. Dynamic Switching Activity Suppression:
+   - Arithmetic datapath inputs achieved -41.6% transition toggle reduction (-327 toggles).
+   - Logic datapath inputs achieved -23.1% transition toggle reduction (-182 toggles).
+   - Operator-level boundary: In unshared architectures with separate adder and subtractor units, total arithmetic
+     operator transitions dropped by -70.8% due to resource sharing and input gating.
+   - Mechanism: Inputs to the 8-bit carry chain are gated to zero during logical operations,
      suppressing dynamic switching activity across inactive functional sub-blocks.
-4. Physical Characterization Note:
-   - Generic synthesis counts provide technology-independent gate metrics.
-   - True silicon area (um^2) and maximum frequency (Fmax) require a foundry standard-cell library (Liberty .lib).
-================================================================================
+2. Resource-Shared Arithmetic Architecture:
+   - Unified 9-bit two's-complement arithmetic unit replaces separate addition and subtraction operators.
+   - Subtraction inverts operand B (b_operand = ~arith_b) and asserts carry-in (cin = 1).
+   - Borrow flag is extracted via carry-out inversion (~arith_res[8]).
+3. Logic Cell Complexity & Netlist Interconnect:
+   - Generic cell count reduced by -3.0%: Unified adder reduces arithmetic cell count,
+     achieving net cell savings despite input gating multiplexer insertion.
+   - Netlist wires (nets) reduced by -19.3%: Reduced multiplexing stages and resource sharing
+     minimize internal netlist interconnect footprint.
+4. Timing Limitations & Target Technology Disclaimer:
+   - Critical Path Delay: Gating multiplexers introduce one 2-to-1 MUX gate delay on operand arrival.
+     The 8-bit ripple carry chain dominates the critical path, so gating has minimal timing overhead.
+   - Technology Disclaimer: The metrics above represent simulated RTL switching-activity estimates (signal bit
+     transitions) and generic CMOS technology-independent netlist complexity (Yosys synth -noabc).
+     They do NOT represent physical power in milliwatts (mW) or post-layout silicon area (um^2).
+     Accurate physical power and static timing analysis (STA) require foundry standard-cell library models (.lib),
+     wire parasitics (SPEF), and timing constraints (.sdc) via OpenSTA/OpenROAD.
+==========================================================================================================

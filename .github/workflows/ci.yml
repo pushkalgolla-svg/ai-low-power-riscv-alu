@@ -33,10 +33,15 @@ jobs:
           pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Run VCD Parser Unit Tests
+        run: |
+          echo "=== Running VCD Parser Unit Tests ==="
+          python -m unittest discover tests
+
       - name: Verify 8-Bit ALU (Icarus Verilog)
         run: |
           echo "=== Compiling & Running 8-bit ALU Testbench ==="
-          iverilog -g2005-sv -o reports/alu_sim.vvp src/alu_baseline.v src/alu_optimized.v tb/alu_tb.v
+          iverilog -g2005-sv -DDUMP_VCD -o reports/alu_sim.vvp src/alu_baseline.v src/alu_optimized.v tb/alu_tb.v
           vvp reports/alu_sim.vvp
 
       - name: Verify 32-Bit RISC-V (RV32I) ALU (Icarus Verilog)
@@ -61,6 +66,7 @@ jobs:
           test -f reports/comparison_report.txt
           test -f reports/riscv_ppa_report.txt
           test -f reports/riscv_activity.vcd
+          test -f reports/alu_activity.vcd
           python -c "
           import sys
           reports = ['reports/comparison_report.txt', 'reports/riscv_ppa_report.txt']
@@ -70,12 +76,13 @@ jobs:
               lines = content.splitlines()
               found_cells = False
               found_wires = False
+              found_act = False
               base_cells = 0
               opt_cells = 0
               base_wires = 0
               opt_wires = 0
               for line in lines:
-                  if 'Total Synthesized Netlist Cells' in line:
+                  if 'Total Synthesized Cells' in line or 'Total Synthesized Netlist Cells' in line:
                       parts = [p.strip() for p in line.split('|')]
                       if len(parts) >= 3:
                           base_cells = int(parts[1])
@@ -91,8 +98,10 @@ jobs:
                           assert base_wires > 0, f'Zero baseline wires in {r}'
                           assert opt_wires > 0, f'Zero opt wires in {r}'
                           found_wires = True
-              if not found_cells or not found_wires:
-                  print(f'[FATAL] Failed to find valid non-zero statistics in {r} (cells={found_cells}, wires={found_wires})')
+                  if 'Arithmetic Datapath Inputs' in line:
+                      found_act = True
+              if not found_cells or not found_wires or not found_act:
+                  print(f'[FATAL] Failed to find valid non-zero statistics in {r} (cells={found_cells}, wires={found_wires}, act={found_act})')
                   sys.exit(1)
               if 'comparison_report.txt' in r:
                   assert (base_cells, opt_cells) == (231, 224), f'Unexpected 8-bit cells in {r}: {(base_cells, opt_cells)}'
@@ -102,5 +111,5 @@ jobs:
                   assert (base_cells, opt_cells) == (1485, 1499), f'Unexpected 32-bit cells in {r}: {(base_cells, opt_cells)}'
                   assert (base_wires, opt_wires) == (602, 491), f'Unexpected 32-bit wires in {r}: {(base_wires, opt_wires)}'
                   print(f'Verified 32-bit RV32I ALU counts: {base_cells}/{opt_cells} cells, {base_wires}/{opt_wires} wires')
-          print('Report integrity verified: Non-zero synthesis cells and wires confirmed across all reports!')
+          print('Report integrity verified: Non-zero synthesis cells, wires, and switching activities confirmed across all reports!')
           "
