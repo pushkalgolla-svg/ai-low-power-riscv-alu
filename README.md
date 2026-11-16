@@ -1,11 +1,30 @@
 # AI-Driven Low-Power RISC-V (RV32I) ALU Design, Verification & Synthesis Pipeline
 
+[![Interactive Web Demo](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://share.streamlit.io/)
 [![RTL Verification & Low-Power PPA CI](https://github.com/pushkalgolla-svg/ai-low-power-riscv-alu/actions/workflows/ci.yml/badge.svg)](https://github.com/pushkalgolla-svg/ai-low-power-riscv-alu/actions/workflows/ci.yml)
 
 An end-to-end automated hardware-software co-design and verification pipeline for a 32-bit **RISC-V (`RV32I`) ALU** and an **8-bit ALU** in Verilog (IEEE 1364-2001). The pipeline implements architectural Power-Performance-Area (PPA) optimizations—principally **Multi-Datapath Operand Isolation** and **Resource-Shared Arithmetic**—empirically validates dynamic switching-activity suppression via **VCD waveform toggle profiling**, and evaluates gate complexity using **Yosys generic CMOS synthesis**.
 
 ---
 
+
+## 🌐 Interactive Web Studio & Live Simulator
+
+An interactive microarchitectural simulation studio is included with the project, allowing you to test the 32-bit RV32I instructions, visualize real-time operand isolation gating, and explore the Yosys PPA benchmark metrics without running local Verilog compilers.
+
+### Option 1: Launch Streamlit Studio
+```bash
+# Install dependencies
+pip install -r requirements.txt
+
+# Launch interactive web studio
+streamlit run app.py
+```
+
+### Option 2: Standalone Web Dashboard (Browser / Vercel)
+Simply open `index.html` directly in any web browser, or deploy to Vercel/GitHub Pages with zero build configuration.
+
+---
 ## Key Hardware Architectural Optimizations
 
 ### 1. Multi-Datapath Operand Isolation (Input Gating)
